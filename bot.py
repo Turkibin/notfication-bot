@@ -6,8 +6,23 @@ import os
 import datetime
 import aiohttp
 from dotenv import load_dotenv
+from aiohttp import web
 
 load_dotenv()
+
+# --- Web Server for Keep Alive (Railway Requirement) ---
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"🌍 Web server started on port {port}")
 
 # Configuration
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -273,6 +288,9 @@ async def prayer_task():
 
 @bot.event
 async def on_ready():
+    # Start web server
+    await start_web_server()
+
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")
