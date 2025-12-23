@@ -291,6 +291,22 @@ async def on_voice_state_update(member, before, after):
 
 # --- Prayer Times Feature (Voice Only) ---
 
+async def send_prayer_notifications(guild, prayer_name):
+    """Sends text notifications to specific channels."""
+    try:
+        # 1. General Chat (Keep message)
+        chat_channel = discord.utils.get(guild.text_channels, name="chat")
+        if chat_channel and chat_channel.permissions_for(guild.me).send_messages:
+            await chat_channel.send(f"حان الآن موعد صلاة **{prayer_name}** حسب توقيت الرياض 🕌\n@everyone")
+
+        # 2. Athkar Chat (Delete after 20 mins)
+        athkar_channel = discord.utils.get(guild.text_channels, name="اذكار")
+        if athkar_channel and athkar_channel.permissions_for(guild.me).send_messages:
+            await athkar_channel.send(f"حان الآن موعد صلاة **{prayer_name}** حسب توقيت الرياض 🕌\n@everyone", delete_after=1200)
+            
+    except Exception as e:
+        print(f"Notification error in {guild.name}: {e}")
+
 async def play_prayer_audio(guild, prayer_name_en):
     """Finds active voice channels and plays the prayer audio."""
     # Determine audio file
@@ -364,6 +380,9 @@ async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Cho
     
     prayer_name_en = prayer.value
     guild = interaction.guild
+
+    # Send notifications manually for testing
+    await send_prayer_notifications(guild, prayer_name_en)
     
     # 1. Prepare Audio
     audio_file = f"{prayer_name_en.lower()}.mp3"
@@ -447,7 +466,11 @@ async def prayer_task():
                         if timings[prayer] == current_time:
                             print(f"It's {prayer} time! Checking guilds...")
                             for guild in bot.guilds:
-                                await play_prayer_audio(guild, prayer)
+                                # Run voice and text notifications concurrently
+                                await asyncio.gather(
+                                    play_prayer_audio(guild, prayer),
+                                    send_prayer_notifications(guild, prayer)
+                                )
                             
                             # Wait a bit to prevent double triggering within the same minute
                             await asyncio.sleep(60) 
