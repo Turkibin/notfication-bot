@@ -34,6 +34,8 @@ if not TOKEN:
 else:
     print("✅ Token found, starting bot...")
 
+import ctypes.util
+
 # Debug: Check Environment
 print(f"Current Directory: {os.getcwd()}")
 print(f"Files in dir: {os.listdir('.')}")
@@ -41,6 +43,26 @@ ffmpeg_path = shutil.which("ffmpeg")
 print(f"FFmpeg path: {ffmpeg_path}")
 if not ffmpeg_path:
     print("⚠️ WARNING: FFmpeg not found in PATH! Audio will not work.")
+
+# Try to load Opus manually if needed (Common fix for Linux/Railway)
+if not discord.opus.is_loaded():
+    try:
+        opus_lib = ctypes.util.find_library("opus")
+        if opus_lib:
+            discord.opus.load_opus(opus_lib)
+            print(f"✅ Opus loaded successfully from {opus_lib}")
+        else:
+            print("⚠️ Could not find opus library via ctypes.")
+            # Try common paths
+            for lib in ["libopus.so.0", "libopus.so", "libopus-0.dll"]:
+                try:
+                    discord.opus.load_opus(lib)
+                    print(f"✅ Opus loaded manually from {lib}")
+                    break
+                except:
+                    pass
+    except Exception as e:
+        print(f"❌ Error loading opus: {e}")
 
 # Intents setup
 intents = discord.Intents.default()
@@ -55,6 +77,29 @@ bot_active = True
 prayer_pause = False
 
 # --- Welcome Feature ---
+
+@bot.tree.command(name="debug", description="فحص مشاكل الصوت (للمشرفين فقط)")
+async def debug_bot(interaction: discord.Interaction):
+    """Checks environment variables and files."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    report = "🔍 **تقرير الفحص:**\n"
+    
+    # 1. FFmpeg
+    ffmpeg_path = shutil.which("ffmpeg")
+    report += f"- **FFmpeg:** {'✅ موجود' if ffmpeg_path else '❌ غير موجود'}\n"
+    report += f"- **مسار FFmpeg:** `{ffmpeg_path}`\n"
+    
+    # 2. Opus
+    report += f"- **Opus Loaded:** {'✅ نعم' if discord.opus.is_loaded() else '❌ لا'}\n"
+    
+    # 3. Audio Files
+    files = [f for f in os.listdir('.') if f.endswith('.mp3')]
+    report += f"- **ملفات الصوت:** {', '.join(files) if files else '❌ لا يوجد'}\n"
+    
+    await interaction.response.send_message(report, ephemeral=True)
 
 @bot.tree.command(name="stop", description="إيقاف الترحيب مؤقتاً (للمشرفين فقط)")
 async def stop_bot(interaction: discord.Interaction):
