@@ -11,8 +11,7 @@ from aiohttp import web
 load_dotenv()
 import shutil
 import ctypes.util
-import static_ffmpeg
-static_ffmpeg.add_paths()
+import subprocess
 
 # --- Web Server for Keep Alive (Railway Requirement) ---
 async def handle(request):
@@ -41,10 +40,36 @@ import ctypes.util
 # Debug: Check Environment
 print(f"Current Directory: {os.getcwd()}")
 print(f"Files in dir: {os.listdir('.')}")
-ffmpeg_path = shutil.which("ffmpeg")
-print(f"FFmpeg path: {ffmpeg_path}")
-if not ffmpeg_path:
-    print("⚠️ WARNING: FFmpeg not found in PATH! Audio will not work.")
+
+# --- Robust FFmpeg Finder ---
+def find_ffmpeg():
+    # 1. Try shutil.which (PATH)
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    
+    # 2. Try common Linux/Nix paths
+    common_paths = [
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/bin/ffmpeg",
+        "/nix/var/nix/profiles/default/bin/ffmpeg",
+    ]
+    for p in common_paths:
+        if os.path.exists(p) and os.access(p, os.X_OK):
+            return p
+            
+    # 3. Search in current directory
+    if os.path.exists("ffmpeg.exe"): return os.path.abspath("ffmpeg.exe")
+    if os.path.exists("ffmpeg"): return os.path.abspath("ffmpeg")
+    
+    return None
+
+FFMPEG_PATH = find_ffmpeg()
+print(f"✅ FOUND FFmpeg at: {FFMPEG_PATH}")
+
+if not FFMPEG_PATH:
+    print("⚠️ WARNING: FFmpeg not found in any standard location!")
 
 # Try to load Opus manually if needed (Common fix for Linux/Railway)
 if not discord.opus.is_loaded():
@@ -90,9 +115,17 @@ async def debug_bot(interaction: discord.Interaction):
     report = "🔍 **تقرير الفحص:**\n"
     
     # 1. FFmpeg
-    ffmpeg_path = shutil.which("ffmpeg")
-    report += f"- **FFmpeg:** {'✅ موجود' if ffmpeg_path else '❌ غير موجود'}\n"
-    report += f"- **مسار FFmpeg:** `{ffmpeg_path}`\n"
+    report += f"- **مسار FFmpeg المستخدم:** `{FFMPEG_PATH}`\n"
+    if FFMPEG_PATH:
+        try:
+            result = subprocess.run([FFMPEG_PATH, "-version"], capture_output=True, text=True)
+            version = result.stdout.splitlines()[0] if result.stdout else "Unknown"
+            report += f"- **النسخة:** `{version}`\n"
+        except Exception as e:
+            report += f"- **خطأ في التشغيل:** `{e}`\n"
+    else:
+        report += "- **FFmpeg:** ❌ غير موجود نهائياً\n"
+        report += f"- **PATH Env:** `{os.environ.get('PATH')}`\n"
     
     # 2. Opus
     report += f"- **Opus Loaded:** {'✅ نعم' if discord.opus.is_loaded() else '❌ لا'}\n"
@@ -101,13 +134,13 @@ async def debug_bot(interaction: discord.Interaction):
     files = [f for f in os.listdir('.') if f.endswith('.mp3')]
     report += f"- **ملفات الصوت:** {', '.join(files) if files else '❌ لا يوجد'}\n"
     
-    # 4. Try running FFmpeg
-    try:
-        import subprocess
-        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
-        report += f"- **FFmpeg Version:** `{result.stdout.splitlines()[0]}`\n"
-    except Exception as e:
-        report += f"- **FFmpeg Run Error:** `{e}`\n"
+    # 4. Try running FFmpeg (Removed old block)
+    # try:
+    #     import subprocess
+    #     result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+    #     report += f"- **FFmpeg Version:** `{result.stdout.splitlines()[0]}`\n"
+    # except Exception as e:
+    #     report += f"- **FFmpeg Run Error:** `{e}`\n"
 
     await interaction.response.send_message(report, ephemeral=True)
 
@@ -327,10 +360,10 @@ async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Cho
                  return
 
             try:
-                # Explicitly use 'ffmpeg' command, assuming it's in PATH (nixpacks installs it)
-                # If not found, we might need to find where nixpacks puts it, but usually it's in PATH.
-                # Adding options='-vn' is good practice for audio only.
-                vc.play(discord.FFmpegPCMAudio(source=abs_path, executable="ffmpeg", options="-vn"))
+                # Explicitly use found FFMPEG_PATH
+                executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
+                vc.play(discord.FFmpegPCMAudio(source=abs_path, executable=executable, options="-vn"))
+                print(f"Playback started for {audio_file} using {executable}")
             except Exception as e:
                 print(f"❌ Test Prayer Error: {e}")
                 await interaction.followup.send(f"⚠️ خطأ في تشغيل الصوت: {e}", ephemeral=True)
