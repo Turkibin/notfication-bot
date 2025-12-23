@@ -44,18 +44,18 @@ print(f"Files in dir: {os.listdir('.')}")
 
 # --- Robust FFmpeg Finder ---
 def find_ffmpeg():
-    # 1. Try imageio-ffmpeg (Most reliable, provides static binary)
+    # 1. Try shutil.which (PATH) - Prioritize system FFmpeg (Docker)
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+
+    # 2. Try imageio-ffmpeg (Fallback)
     try:
         path = imageio_ffmpeg.get_ffmpeg_exe()
         print(f"✅ Found FFmpeg via imageio-ffmpeg: {path}")
         return path
     except Exception as e:
         print(f"⚠️ imageio-ffmpeg failed: {e}")
-
-    # 2. Try shutil.which (PATH)
-    path = shutil.which("ffmpeg")
-    if path:
-        return path
     
     # 3. Try common Linux/Nix paths
     common_paths = [
