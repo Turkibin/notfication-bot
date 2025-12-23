@@ -273,7 +273,7 @@ async def on_voice_state_update(member, before, after):
 
         try:
             # Connect
-            vc = await voice_channel.connect()
+            vc = await voice_channel.connect(self_deaf=True)
             
             # Look for audio file
             if os.path.exists("welcome.mp3"):
