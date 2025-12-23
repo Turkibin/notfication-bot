@@ -12,6 +12,7 @@ load_dotenv()
 import shutil
 import ctypes.util
 import subprocess
+import imageio_ffmpeg
 
 # --- Web Server for Keep Alive (Railway Requirement) ---
 async def handle(request):
@@ -43,12 +44,20 @@ print(f"Files in dir: {os.listdir('.')}")
 
 # --- Robust FFmpeg Finder ---
 def find_ffmpeg():
-    # 1. Try shutil.which (PATH)
+    # 1. Try imageio-ffmpeg (Most reliable, provides static binary)
+    try:
+        path = imageio_ffmpeg.get_ffmpeg_exe()
+        print(f"✅ Found FFmpeg via imageio-ffmpeg: {path}")
+        return path
+    except Exception as e:
+        print(f"⚠️ imageio-ffmpeg failed: {e}")
+
+    # 2. Try shutil.which (PATH)
     path = shutil.which("ffmpeg")
     if path:
         return path
     
-    # 2. Try common Linux/Nix paths
+    # 3. Try common Linux/Nix paths
     common_paths = [
         "/usr/bin/ffmpeg",
         "/usr/local/bin/ffmpeg",
@@ -59,7 +68,7 @@ def find_ffmpeg():
         if os.path.exists(p) and os.access(p, os.X_OK):
             return p
             
-    # 3. Search in current directory
+    # 4. Search in current directory
     if os.path.exists("ffmpeg.exe"): return os.path.abspath("ffmpeg.exe")
     if os.path.exists("ffmpeg"): return os.path.abspath("ffmpeg")
     
