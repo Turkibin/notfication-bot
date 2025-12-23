@@ -374,6 +374,16 @@ async def play_prayer_audio(guild, prayer_name_en):
     
     return True
 
+@bot.command(name="force_sync")
+@commands.has_permissions(administrator=True)
+async def force_sync_text(ctx):
+    """Syncs commands using a text command (prefix !)."""
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ تم تحديث {len(synced)} أمر slash بنجاح!")
+    except Exception as e:
+        await ctx.send(f"❌ خطأ: {e}")
+
 @bot.tree.command(name="test_notification", description="تجربة التنبيهات الكتابية للصلاة (للمشرفين فقط)")
 @app_commands.choices(prayer=[
     app_commands.Choice(name="الفجر", value="Fajr"),
