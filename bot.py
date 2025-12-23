@@ -99,6 +99,14 @@ async def debug_bot(interaction: discord.Interaction):
     files = [f for f in os.listdir('.') if f.endswith('.mp3')]
     report += f"- **ملفات الصوت:** {', '.join(files) if files else '❌ لا يوجد'}\n"
     
+    # 4. Try running FFmpeg
+    try:
+        import subprocess
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+        report += f"- **FFmpeg Version:** `{result.stdout.splitlines()[0]}`\n"
+    except Exception as e:
+        report += f"- **FFmpeg Run Error:** `{e}`\n"
+
     await interaction.response.send_message(report, ephemeral=True)
 
 @bot.tree.command(name="stop", description="إيقاف الترحيب مؤقتاً (للمشرفين فقط)")
@@ -309,9 +317,18 @@ async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Cho
             vc = await v_channel.connect()
             
             # Play
-            print(f"Test Prayer: Playing {audio_file}...")
+            abs_path = os.path.abspath(audio_file)
+            print(f"Test Prayer: Playing {abs_path}...")
+            
+            if not os.path.exists(abs_path):
+                 await interaction.followup.send(f"⚠️ الملف غير موجود في المسار: {abs_path}", ephemeral=True)
+                 return
+
             try:
-                vc.play(discord.FFmpegPCMAudio(audio_file))
+                # Explicitly use 'ffmpeg' command, assuming it's in PATH (nixpacks installs it)
+                # If not found, we might need to find where nixpacks puts it, but usually it's in PATH.
+                # Adding options='-vn' is good practice for audio only.
+                vc.play(discord.FFmpegPCMAudio(source=abs_path, executable="ffmpeg", options="-vn"))
             except Exception as e:
                 print(f"❌ Test Prayer Error: {e}")
                 await interaction.followup.send(f"⚠️ خطأ في تشغيل الصوت: {e}", ephemeral=True)
