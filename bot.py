@@ -1,0 +1,287 @@
+import discord
+from discord import app_commands
+from discord.ext import commands, tasks
+import asyncio
+import os
+import datetime
+import aiohttp
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configuration
+TOKEN = os.getenv('DISCORD_TOKEN')
+
+# Intents setup
+intents = discord.Intents.default()
+intents.message_content = True
+intents.voice_states = True 
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Global variable to control the welcome bot
+bot_active = True
+# Variable to track if welcome is paused due to prayer
+prayer_pause = False
+
+# --- Welcome Feature ---
+
+@bot.tree.command(name="stop", description="إيقاف الترحيب مؤقتاً (للمشرفين فقط)")
+async def stop_bot(interaction: discord.Interaction):
+    """Stops the bot from welcoming users."""
+    global bot_active
+    
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    bot_active = False
+    await interaction.response.send_message("تم إيقاف الترحيب مؤقتاً 🛑")
+
+@bot.tree.command(name="start", description="تفعيل الترحيب من جديد (للمشرفين فقط)")
+async def start_bot(interaction: discord.Interaction):
+    """Resumes the bot welcoming users."""
+    global bot_active
+    
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    bot_active = True
+    await interaction.response.send_message("تم تفعيل الترحيب من جديد ✅")
+
+@bot.tree.command(name="say", description="جعل البوت يرسل رسالة في روم محدد (للمشرفين فقط)")
+@app_commands.describe(channel="الروم الذي تريد الإرسال فيه", message="الرسالة التي تريد إرسالها", image="صورة مرفقة (اختياري)")
+async def say_command(interaction: discord.Interaction, message: str, channel: discord.TextChannel = None, image: discord.Attachment = None):
+    """Makes the bot send a message to a channel."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    target_channel = channel or interaction.channel
+    
+    try:
+        # Check bot permissions in target channel
+        permissions = target_channel.permissions_for(interaction.guild.me)
+        if not permissions.send_messages:
+             await interaction.response.send_message(f"عذراً، لا أملك صلاحية الكتابة في روم {target_channel.mention} 🚫", ephemeral=True)
+             return
+
+        files = []
+        if image:
+            files.append(await image.to_file())
+
+        await target_channel.send(content=message, files=files)
+        await interaction.response.send_message(f"تم إرسال الرسالة بنجاح إلى {target_channel.mention} ✅", ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"حدث خطأ أثناء الإرسال: {e}", ephemeral=True)
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # Check if bot is active (and not paused for prayer)
+    if not bot_active or prayer_pause:
+        return
+
+    # Ignore bots
+    if member.bot:
+        return
+
+    # Check if user joined a channel
+    if after.channel is not None and before.channel != after.channel:
+        voice_channel = after.channel
+        
+        # Check permissions
+        permissions = voice_channel.permissions_for(member.guild.me)
+        if not permissions.connect or not permissions.speak:
+            print(f"Missing permissions in {voice_channel.name}")
+            return
+
+        try:
+            # Connect
+            vc = await voice_channel.connect()
+            
+            # Look for audio file
+            if os.path.exists("welcome.mp3"):
+                print("Playing welcome.mp3...")
+                vc.play(discord.FFmpegPCMAudio("welcome.mp3"))
+                
+                # Wait while playing
+                while vc.is_playing():
+                    await asyncio.sleep(1)
+                
+                await asyncio.sleep(1)
+            else:
+                print("Error: 'welcome.mp3' file not found! Please add your audio file.")
+
+            # Disconnect
+            await vc.disconnect()
+            
+        except discord.errors.ClientException:
+            pass
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            if member.guild.voice_client:
+                await member.guild.voice_client.disconnect()
+
+# --- Prayer Times Feature (Voice Only) ---
+
+async def play_prayer_audio(guild, prayer_name_en):
+    """Finds active voice channels and plays the prayer audio."""
+    # Determine audio file
+    audio_file = f"{prayer_name_en.lower()}.mp3"
+    if not os.path.exists(audio_file):
+        audio_file = "adhan.mp3"
+    
+    if not os.path.exists(audio_file):
+        print(f"Audio file not found for {prayer_name_en}")
+        return False
+
+    # Find all voice channels with members (excluding bots)
+    active_voice_channels = [
+        vc for vc in guild.voice_channels 
+        if len(vc.members) > 0 and any(not m.bot for m in vc.members)
+    ]
+
+    if not active_voice_channels:
+        return False
+
+    for v_channel in active_voice_channels:
+        try:
+            # Disconnect if connected elsewhere
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+            
+            print(f"Joining {v_channel.name} for {prayer_name_en}...")
+            
+            # Connect
+            vc = await v_channel.connect()
+            
+            # Play
+            vc.play(discord.FFmpegPCMAudio(audio_file))
+            while vc.is_playing():
+                await asyncio.sleep(1)
+            await asyncio.sleep(1)
+            
+            await vc.disconnect()
+        except Exception as e:
+            print(f"Voice prayer error in {v_channel.name}: {e}")
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+    
+    return True
+
+@bot.tree.command(name="test_prayer", description="تجربة الأذان: يدخل فوراً وبدون إعدادات (للمشرفين فقط)")
+@app_commands.choices(prayer=[
+    app_commands.Choice(name="الفجر", value="Fajr"),
+    app_commands.Choice(name="الظهر", value="Dhuhr"),
+    app_commands.Choice(name="العصر", value="Asr"),
+    app_commands.Choice(name="المغرب", value="Maghrib"),
+    app_commands.Choice(name="العشاء", value="Isha")
+])
+async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Choice[str]):
+    """Manually triggers the prayer voice notification immediately."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    # Acknowledge the command immediately
+    await interaction.response.send_message(f"جاري الدخول للرومات للأذان لصلاة **{prayer.name}**... 🚀", ephemeral=True)
+    
+    prayer_name_en = prayer.value
+    guild = interaction.guild
+    
+    # 1. Prepare Audio
+    audio_file = f"{prayer_name_en.lower()}.mp3"
+    if not os.path.exists(audio_file):
+        audio_file = "adhan.mp3" # Fallback
+    
+    if not os.path.exists(audio_file):
+        await interaction.followup.send(f"⚠️ ملف الصوت غير موجود: {audio_file}", ephemeral=True)
+        return
+
+    # 2. Find ALL channels with people (No bots)
+    active_channels = [
+        vc for vc in guild.voice_channels 
+        if len(vc.members) > 0 and any(not m.bot for m in vc.members)
+    ]
+
+    if not active_channels:
+        await interaction.followup.send("⚠️ ما فيه أحد في الرومات الصوتية حالياً!", ephemeral=True)
+        return
+
+    # 3. Join them one by one forcefully
+    for v_channel in active_channels:
+        try:
+            # Force disconnect if stuck
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+            
+            # Connect
+            vc = await v_channel.connect()
+            
+            # Play
+            vc.play(discord.FFmpegPCMAudio(audio_file))
+            
+            # Wait until done
+            while vc.is_playing():
+                await asyncio.sleep(1)
+            
+            await asyncio.sleep(0.5) # Quick pause
+            await vc.disconnect()
+            
+        except Exception as e:
+            print(f"Error in {v_channel.name}: {e}")
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+    
+    await interaction.followup.send("✅ تم الانتهاء من الأذان في جميع الرومات.", ephemeral=True)
+
+@tasks.loop(minutes=1)
+async def prayer_task():
+    # Hardcoded Location: Riyadh, SA
+    city = "Riyadh"
+    country = "SA"
+    
+    now = datetime.datetime.now()
+    current_time = now.strftime("%H:%M")
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=4") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    timings = data["data"]["timings"]
+                    
+                    prayers_en = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"]
+                    
+                    for prayer in prayers_en:
+                        if timings[prayer] == current_time:
+                            print(f"It's {prayer} time! Checking guilds...")
+                            for guild in bot.guilds:
+                                await play_prayer_audio(guild, prayer)
+                            
+                            # Wait a bit to prevent double triggering within the same minute
+                            await asyncio.sleep(60) 
+    except Exception as e:
+        print(f"Prayer task error: {e}")
+
+@bot.event
+async def on_ready():
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+
+    if not prayer_task.is_running():
+        prayer_task.start()
+
+    print(f'Logged in as {bot.user.name}')
+    print('Bot is ready to welcome and pray!')
+
+if __name__ == "__main__":
+    try:
+        bot.run(TOKEN)
+    except Exception as e:
+        print(f"Error starting bot: {e}")

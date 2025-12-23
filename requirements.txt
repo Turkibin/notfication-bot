@@ -1,0 +1,5 @@
+discord.py
+gTTS
+aiohttp
+PyNaCl
+python-dotenv
