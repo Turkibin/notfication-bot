@@ -9,8 +9,10 @@ from dotenv import load_dotenv
 from aiohttp import web
 
 load_dotenv()
-
 import shutil
+import ctypes.util
+import static_ffmpeg
+static_ffmpeg.add_paths()
 
 # --- Web Server for Keep Alive (Railway Requirement) ---
 async def handle(request):

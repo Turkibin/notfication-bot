@@ -3,3 +3,4 @@ gTTS
 aiohttp
 PyNaCl
 python-dotenv
+static-ffmpeg
