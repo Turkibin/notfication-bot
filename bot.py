@@ -349,7 +349,7 @@ async def play_prayer_audio(guild, prayer_name_en):
             print(f"Joining {v_channel.name} for {prayer_name_en}...")
             
             # Connect
-            vc = await v_channel.connect()
+            vc = await v_channel.connect(self_deaf=True)
             
             # Play
             print(f"Attempting to play {audio_file} in {v_channel.name}...")
@@ -454,7 +454,7 @@ async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Cho
                 await guild.voice_client.disconnect()
             
             # Connect
-            vc = await v_channel.connect()
+            vc = await v_channel.connect(self_deaf=True)
             
             # Play
             abs_path = os.path.abspath(audio_file)
