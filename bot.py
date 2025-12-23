@@ -361,6 +361,26 @@ async def play_prayer_audio(guild, prayer_name_en):
     
     return True
 
+@bot.tree.command(name="test_notification", description="تجربة التنبيهات الكتابية للصلاة (للمشرفين فقط)")
+@app_commands.choices(prayer=[
+    app_commands.Choice(name="الفجر", value="Fajr"),
+    app_commands.Choice(name="الظهر", value="Dhuhr"),
+    app_commands.Choice(name="العصر", value="Asr"),
+    app_commands.Choice(name="المغرب", value="Maghrib"),
+    app_commands.Choice(name="العشاء", value="Isha")
+])
+async def test_notification(interaction: discord.Interaction, prayer: app_commands.Choice[str]):
+    """Manually triggers the text notification for testing."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"جاري إرسال تنبيهات الصلاة لـ **{prayer.name}**... 📨", ephemeral=True)
+    
+    await send_prayer_notifications(interaction.guild, prayer.value)
+    
+    await interaction.followup.send("✅ تم الإرسال.", ephemeral=True)
+
 @bot.tree.command(name="test_prayer", description="تجربة الأذان: يدخل فوراً وبدون إعدادات (للمشرفين فقط)")
 @app_commands.choices(prayer=[
     app_commands.Choice(name="الفجر", value="Fajr"),
