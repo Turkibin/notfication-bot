@@ -515,16 +515,20 @@ async def on_ready():
     # Start web server
     await start_web_server()
 
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
-    except Exception as e:
-        print(f"Failed to sync commands: {e}")
+    print(f'Logged in as {bot.user.name}')
+    
+    # Sync commands to all guilds immediately (Instant Update)
+    for guild in bot.guilds:
+        try:
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
+            print(f"✅ Synced commands to guild: {guild.name}")
+        except Exception as e:
+            print(f"❌ Failed to sync to {guild.name}: {e}")
 
     if not prayer_task.is_running():
         prayer_task.start()
 
-    print(f'Logged in as {bot.user.name}')
     print('Bot is ready to welcome and pray!')
 
 if __name__ == "__main__":
