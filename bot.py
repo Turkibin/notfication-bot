@@ -80,25 +80,59 @@ print(f"✅ FOUND FFmpeg at: {FFMPEG_PATH}")
 if not FFMPEG_PATH:
     print("⚠️ WARNING: FFmpeg not found in any standard location!")
 
-# Try to load Opus manually if needed (Common fix for Linux/Railway)
-if not discord.opus.is_loaded():
+# --- Robust Opus Finder & Loader ---
+def load_opus():
+    if discord.opus.is_loaded():
+        print("✅ Opus is already loaded.")
+        return
+
+    print("Attempting to load Opus...")
+    
+    # 1. Try ctypes.util.find_library
     try:
-        opus_lib = ctypes.util.find_library("opus")
-        if opus_lib:
-            discord.opus.load_opus(opus_lib)
-            print(f"✅ Opus loaded successfully from {opus_lib}")
-        else:
-            print("⚠️ Could not find opus library via ctypes.")
-            # Try common paths
-            for lib in ["libopus.so.0", "libopus.so", "libopus-0.dll"]:
-                try:
-                    discord.opus.load_opus(lib)
-                    print(f"✅ Opus loaded manually from {lib}")
-                    break
-                except:
-                    pass
+        lib = ctypes.util.find_library("opus")
+        if lib:
+            discord.opus.load_opus(lib)
+            print(f"✅ Loaded Opus via find_library: {lib}")
+            return
     except Exception as e:
-        print(f"❌ Error loading opus: {e}")
+        print(f"⚠️ find_library failed: {e}")
+
+    # 2. Try common Linux/Nix paths (Railway/Nixpacks specific)
+    common_lib_paths = [
+        "/usr/lib/libopus.so",
+        "/usr/lib/libopus.so.0",
+        "/usr/local/lib/libopus.so",
+        "/lib/libopus.so",
+    ]
+    
+    # Search in Nix store
+    import glob
+    nix_matches = glob.glob("/nix/store/*-libopus-*/lib/libopus.so.0")
+    if nix_matches:
+        common_lib_paths.extend(nix_matches)
+
+    for lib_path in common_lib_paths:
+        try:
+            discord.opus.load_opus(lib_path)
+            print(f"✅ Loaded Opus manually from: {lib_path}")
+            return
+        except:
+            pass
+            
+    # 3. Try direct names
+    for lib in ["libopus.so.0", "libopus.so", "libopus-0.dll"]:
+        try:
+            discord.opus.load_opus(lib)
+            print(f"✅ Loaded Opus via direct name: {lib}")
+            return
+        except:
+            pass
+            
+    print("❌ Could not load Opus. Voice will likely fail.")
+
+# Load Opus at startup
+load_opus()
 
 # Intents setup
 intents = discord.Intents.default()
