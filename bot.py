@@ -527,7 +527,15 @@ async def on_ready():
 
     print(f'Logged in as {bot.user.name}')
     
-    # Sync commands to all guilds immediately (Instant Update)
+    # 1. Clear Global Commands (Remove duplicates)
+    try:
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync(guild=None)
+        print("🧹 Cleared global commands to prevent duplicates.")
+    except Exception as e:
+        print(f"⚠️ Error clearing global commands: {e}")
+
+    # 2. Sync commands to all guilds immediately (Instant Update)
     for guild in bot.guilds:
         try:
             bot.tree.copy_global_to(guild=guild)
