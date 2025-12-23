@@ -10,6 +10,8 @@ from aiohttp import web
 
 load_dotenv()
 
+import shutil
+
 # --- Web Server for Keep Alive (Railway Requirement) ---
 async def handle(request):
     return web.Response(text="Bot is running!")
@@ -31,6 +33,14 @@ if not TOKEN:
     print("❌ ERROR: DISCORD_TOKEN is missing! Make sure to add it in Railway Variables.")
 else:
     print("✅ Token found, starting bot...")
+
+# Debug: Check Environment
+print(f"Current Directory: {os.getcwd()}")
+print(f"Files in dir: {os.listdir('.')}")
+ffmpeg_path = shutil.which("ffmpeg")
+print(f"FFmpeg path: {ffmpeg_path}")
+if not ffmpeg_path:
+    print("⚠️ WARNING: FFmpeg not found in PATH! Audio will not work.")
 
 # Intents setup
 intents = discord.Intents.default()
@@ -123,8 +133,12 @@ async def on_voice_state_update(member, before, after):
             
             # Look for audio file
             if os.path.exists("welcome.mp3"):
-                print("Playing welcome.mp3...")
-                vc.play(discord.FFmpegPCMAudio("welcome.mp3"))
+                print("Found welcome.mp3, attempting to play...")
+                try:
+                    vc.play(discord.FFmpegPCMAudio("welcome.mp3"))
+                    print("Playing started successfully.")
+                except Exception as e:
+                    print(f"❌ Error playing audio: {e}")
                 
                 # Wait while playing
                 while vc.is_playing():
@@ -132,7 +146,7 @@ async def on_voice_state_update(member, before, after):
                 
                 await asyncio.sleep(1)
             else:
-                print("Error: 'welcome.mp3' file not found! Please add your audio file.")
+                print(f"Error: 'welcome.mp3' file not found! Current dir files: {os.listdir('.')}")
 
             # Disconnect
             await vc.disconnect()
@@ -178,7 +192,16 @@ async def play_prayer_audio(guild, prayer_name_en):
             vc = await v_channel.connect()
             
             # Play
-            vc.play(discord.FFmpegPCMAudio(audio_file))
+            print(f"Attempting to play {audio_file} in {v_channel.name}...")
+            if not os.path.exists(audio_file):
+                print(f"❌ File not found right before playing: {audio_file}")
+            
+            try:
+                vc.play(discord.FFmpegPCMAudio(audio_file))
+                print(f"Playback started for {audio_file}")
+            except Exception as e:
+                 print(f"❌ FFmpeg Playback Error: {e}")
+
             while vc.is_playing():
                 await asyncio.sleep(1)
             await asyncio.sleep(1)
@@ -241,7 +264,12 @@ async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Cho
             vc = await v_channel.connect()
             
             # Play
-            vc.play(discord.FFmpegPCMAudio(audio_file))
+            print(f"Test Prayer: Playing {audio_file}...")
+            try:
+                vc.play(discord.FFmpegPCMAudio(audio_file))
+            except Exception as e:
+                print(f"❌ Test Prayer Error: {e}")
+                await interaction.followup.send(f"⚠️ خطأ في تشغيل الصوت: {e}", ephemeral=True)
             
             # Wait until done
             while vc.is_playing():
