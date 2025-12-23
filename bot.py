@@ -12,6 +12,11 @@ load_dotenv()
 # Configuration
 TOKEN = os.getenv('DISCORD_TOKEN')
 
+if not TOKEN:
+    print("❌ ERROR: DISCORD_TOKEN is missing! Make sure to add it in Railway Variables.")
+else:
+    print("✅ Token found, starting bot...")
+
 # Intents setup
 intents = discord.Intents.default()
 intents.message_content = True
