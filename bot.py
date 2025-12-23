@@ -148,6 +148,19 @@ prayer_pause = False
 
 # --- Welcome Feature ---
 
+@bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
+async def sync_commands(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+        
+    await interaction.response.defer(ephemeral=True)
+    try:
+        synced = await bot.tree.sync()
+        await interaction.followup.send(f"✅ تم تحديث {len(synced)} أمر بنجاح!")
+    except Exception as e:
+        await interaction.followup.send(f"❌ حدث خطأ: {e}")
+
 @bot.tree.command(name="debug", description="فحص مشاكل الصوت (للمشرفين فقط)")
 async def debug_bot(interaction: discord.Interaction):
     """Checks environment variables and files."""
