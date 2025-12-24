@@ -323,121 +323,70 @@ async def say_command(interaction: discord.Interaction, message: str, code: str,
     except Exception as e:
         await interaction.response.send_message(f"حدث خطأ أثناء الإرسال: {e}", ephemeral=True)
 
-# --- Role Control Panel (Admin) ---
+# --- Game Role Selector (Self-Service) ---
 
-def _extract_id(text: str) -> int | None:
-    digits = ''.join(ch for ch in text if ch.isdigit())
-    try:
-        return int(digits) if digits else None
-    except:
-        return None
-
-class GiveRoleModal(discord.ui.Modal, title="إعطاء رتبة"):
-    user_input = discord.ui.TextInput(label="العضو (منشن أو ID)", placeholder="@username أو 1234567890", required=True)
-    role_input = discord.ui.TextInput(label="اسم الرتبة", placeholder="اكتب اسم الرتبة بالضبط", required=True)
-
+class RoleSelect(discord.ui.Select):
     def __init__(self):
-        super().__init__()
+        options = [
+            discord.SelectOption(label="Rocket League", emoji="🚗", value="role_rocket", description="سيارات وكرة قدم"),
+            discord.SelectOption(label="FiveM", emoji="👮‍♂️", value="role_fivem", description="حياة واقعية GTA V"),
+            discord.SelectOption(label="Call of Duty", emoji="💀", value="role_cod", description="حروب وإطلاق نار"),
+            discord.SelectOption(label="Minecraft", emoji="🪓", value="role_minecraft", description="بناء ومغامرات"),
+            discord.SelectOption(label="Fortnite", emoji="🔫", value="role_fortnite", description="باتل رويال"),
+            discord.SelectOption(label="Overwatch", emoji="�", value="role_overwatch", description="أبطال وقدرات"),
+        ]
+        super().__init__(placeholder="اختر ألعابك من هنا... | Select your games...", min_values=0, max_values=len(options), custom_id="role_select_menu")
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
+        # Defer immediately
+        await interaction.response.defer(ephemeral=True)
+        
         guild = interaction.guild
-        if not guild:
-            await interaction.response.send_message("❌ هذا الأمر يعمل داخل السيرفر فقط.", ephemeral=True)
-            return
+        all_values = [opt.value for opt in self.options]
+        
+        added = []
+        removed = []
+        
+        for value in all_values:
+            # Find the option to get the label (Role Name)
+            option = next(opt for opt in self.options if opt.value == value)
+            role_name = option.label # The role name is the label (e.g. "Fortnite")
+            
+            # Find or Create Role
+            role = discord.utils.get(guild.roles, name=role_name)
+            if not role:
+                try:
+                    role = await guild.create_role(name=role_name, mentionable=True)
+                except:
+                    continue # Skip if can't create
+            
+            # Check logic
+            if value in self.values:
+                # Selected -> Add
+                if role not in interaction.user.roles:
+                    await interaction.user.add_roles(role)
+                    added.append(role_name)
+            else:
+                # Not Selected -> Remove
+                if role in interaction.user.roles:
+                    await interaction.user.remove_roles(role)
+                    removed.append(role_name)
 
-        # Permissions
-        if not guild.me.guild_permissions.manage_roles:
-            await interaction.response.send_message("🚫 أحتاج صلاحية Manage Roles.", ephemeral=True)
-            return
+        msg = ""
+        if added: msg += f"✅ تمت إضافة: {', '.join(added)}\n"
+        if removed: msg += f"❌ تمت إزالة: {', '.join(removed)}\n"
+        if not msg: msg = "لم يتم تغيير أي شيء."
+        
+        await interaction.followup.send(msg, ephemeral=True)
 
-        member_id = _extract_id(str(self.user_input))
-        member = guild.get_member(member_id) if member_id else None
-        if not member:
-            # try exact name match
-            member = discord.utils.find(lambda m: m.name.lower() == str(self.user_input).strip().lower(), guild.members)
-        if not member:
-            await interaction.response.send_message("❌ لم أستطع العثور على العضو.", ephemeral=True)
-            return
-
-        role_name = str(self.role_input).strip()
-        role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
-        if not role:
-            await interaction.response.send_message("❌ لم أجد الرتبة بهذا الاسم.", ephemeral=True)
-            return
-
-        # Bot cannot manage roles above its top role
-        if role >= guild.me.top_role or role.managed:
-            await interaction.response.send_message("🚫 لا أستطيع إدارة هذه الرتبة (أعلى من رتبة البوت أو مُدارة).", ephemeral=True)
-            return
-
-        try:
-            await member.add_roles(role)
-            await interaction.response.send_message(f"✅ تم إعطاء رتبة **{role.name}** للعضو **{member.display_name}**.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ فشل إعطاء الرتبة: {e}", ephemeral=True)
-
-class RemoveRoleModal(discord.ui.Modal, title="سحب رتبة"):
-    user_input = discord.ui.TextInput(label="العضو (منشن أو ID)", placeholder="@username أو 1234567890", required=True)
-    role_input = discord.ui.TextInput(label="اسم الرتبة", placeholder="اكتب اسم الرتبة بالضبط", required=True)
-
-    def __init__(self):
-        super().__init__()
-
-    async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        if not guild:
-            await interaction.response.send_message("❌ هذا الأمر يعمل داخل السيرفر فقط.", ephemeral=True)
-            return
-
-        if not guild.me.guild_permissions.manage_roles:
-            await interaction.response.send_message("🚫 أحتاج صلاحية Manage Roles.", ephemeral=True)
-            return
-
-        member_id = _extract_id(str(self.user_input))
-        member = guild.get_member(member_id) if member_id else None
-        if not member:
-            member = discord.utils.find(lambda m: m.name.lower() == str(self.user_input).strip().lower(), guild.members)
-        if not member:
-            await interaction.response.send_message("❌ لم أستطع العثور على العضو.", ephemeral=True)
-            return
-
-        role_name = str(self.role_input).strip()
-        role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
-        if not role:
-            await interaction.response.send_message("❌ لم أجد الرتبة بهذا الاسم.", ephemeral=True)
-            return
-
-        if role not in member.roles:
-            await interaction.response.send_message("ℹ️ العضو لا يحمل هذه الرتبة.", ephemeral=True)
-            return
-
-        if role >= guild.me.top_role or role.managed:
-            await interaction.response.send_message("🚫 لا أستطيع إدارة هذه الرتبة (أعلى من رتبة البوت أو مُدارة).", ephemeral=True)
-            return
-
-        try:
-            await member.remove_roles(role)
-            await interaction.response.send_message(f"✅ تم سحب رتبة **{role.name}** من **{member.display_name}**.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ فشل سحب الرتبة: {e}", ephemeral=True)
-
-class RolePanelView(discord.ui.View):
+class RoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(discord.ui.Button(label="إعطاء رتبة", style=discord.ButtonStyle.success))
-        self.add_item(discord.ui.Button(label="سحب رتبة", style=discord.ButtonStyle.danger))
+        self.add_item(RoleSelect())
 
-    @discord.ui.button(label="إعطاء رتبة", style=discord.ButtonStyle.success)
-    async def give_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(GiveRoleModal())
-
-    @discord.ui.button(label="سحب رتبة", style=discord.ButtonStyle.danger)
-    async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(RemoveRoleModal())
-
-@bot.tree.command(name="setup_role_panel", description="إنشاء لوحة إدارة الرتب في روم محدد")
-@app_commands.describe(code="كود الأمان", channel="الروم الذي تُنشأ فيه اللوحة")
-async def setup_role_panel(interaction: discord.Interaction, code: str, channel: discord.TextChannel = None):
+@bot.tree.command(name="setup_ranks", description="إنشاء قائمة اختيار رتب الألعاب")
+@app_commands.describe(code="كود الأمان", channel="الروم (اختياري)")
+async def setup_ranks(interaction: discord.Interaction, code: str, channel: discord.TextChannel = None):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
@@ -452,12 +401,15 @@ async def setup_role_panel(interaction: discord.Interaction, code: str, channel:
         return
 
     embed = discord.Embed(
-        title="لوحة إدارة الرتب",
-        description="اختر العملية المناسبة:\n- إعطاء رتبة لعضو\n- سحب رتبة من عضو",
-        color=discord.Color.blurple()
+        title="🎮 اختر ألعابك | Choose Your Games",
+        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
+        color=discord.Color.gold()
     )
-    await target.send(embed=embed, view=RolePanelView())
-    await interaction.response.send_message("✅ تم إنشاء اللوحة بنجاح.", ephemeral=True)
+    if interaction.guild.icon:
+        embed.set_thumbnail(url=interaction.guild.icon.url)
+
+    await target.send(embed=embed, view=RoleView())
+    await interaction.response.send_message("✅ تم إنشاء قائمة الألعاب بنجاح.", ephemeral=True)
 
 @bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في جميع الرومات الصوتية النشطة")
 async def ajrr_command(interaction: discord.Interaction):
@@ -865,8 +817,8 @@ async def on_ready():
             print(f"❌ Failed to clear duplicates for {guild.name}: {e}")
 
     # Register the persistent view for roles so it works after restart
-    bot.add_view(RolePanelView()) 
-    print("✅ RolePanelView registered.")
+    bot.add_view(RoleView()) 
+    print("✅ RoleView registered.")
 
     # --- Auto-Send Rank Panel ---
     # (Removed auto-send rank panel)
