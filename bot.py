@@ -170,116 +170,13 @@ prayer_pause = False
 
 # --- Welcome Feature ---
 
-@bot.tree.command(name="setup_ranks", description="إنشاء لوحة اختيار رتب الألعاب (للمشرفين فقط)")
-async def setup_ranks(interaction: discord.Interaction):
-    """Sets up the role selection panel."""
-    # Defer immediately to prevent timeout
-    await interaction.response.defer(ephemeral=True)
-    
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.followup.send("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
-        return
-
-    # Check for "Manage Roles" permission
-    if not interaction.guild.me.guild_permissions.manage_roles:
-        await interaction.followup.send("⚠️ عذراً، أحتاج صلاحية **Manage Roles** لأقوم بتوزيع الرتب!", ephemeral=True)
-        return
-
-    view = RoleView()
-    embed = discord.Embed(
-        title="🎮 اختر رتبتك | Choose Your Rank",
-        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-        color=discord.Color.blue()
-    )
-    embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-    
-    await interaction.channel.send(embed=embed, view=view)
-    await interaction.followup.send("✅ تم إنشاء اللوحة بنجاح!", ephemeral=True)
+# (Removed setup_ranks command)
 
 # --- Role View & Select Menu ---
-class RoleSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Rocket League", emoji="🚗", value="role_rocket", description="سيارات وكرة قدم"),
-            discord.SelectOption(label="FiveM", emoji="👮‍♂️", value="role_fivem", description="حياة واقعية GTA V"),
-            discord.SelectOption(label="Call of Duty", emoji="💀", value="role_cod", description="حروب وإطلاق نار"),
-            discord.SelectOption(label="Minecraft", emoji="🪓", value="role_minecraft", description="بناء ومغامرات"),
-            discord.SelectOption(label="Fortnite", emoji="🔫", value="role_fortnite", description="باتل رويال"),
-            discord.SelectOption(label="Overwatch", emoji="💥", value="role_overwatch", description="أبطال وقدرات"),
-        ]
-        super().__init__(placeholder="اختر رتبتك من هنا... | Select your rank...", min_values=0, max_values=len(options), custom_id="role_select_menu")
-
-    async def callback(self, interaction: discord.Interaction):
-        # Defer immediately to avoid interaction failed
-        await interaction.response.defer(ephemeral=True)
-        
-        # Get all possible roles from options
-        all_role_values = [opt.value for opt in self.options]
-        
-        added_roles = []
-        removed_roles = []
-        
-        for value in all_role_values:
-            # Map values to role names
-            role_name = next(opt.label for opt in self.options if opt.value == value)
-            role = discord.utils.get(interaction.guild.roles, name=role_name)
-            
-            # Create role if missing
-            if not role:
-                try:
-                    role = await interaction.guild.create_role(name=role_name, mentionable=True)
-                except:
-                    continue
-
-            if value in self.values:
-                # User selected this role -> Add it if not present
-                if role not in interaction.user.roles:
-                    await interaction.user.add_roles(role)
-                    added_roles.append(role_name)
-            else:
-                # User did NOT select this role -> Remove it if present
-                if role in interaction.user.roles:
-                    await interaction.user.remove_roles(role)
-                    removed_roles.append(role_name)
-
-        # Build response message
-        msg = ""
-        if added_roles:
-            msg += f"✅ تمت إضافة: {', '.join(added_roles)}\n"
-        if removed_roles:
-            msg += f"❌ تمت إزالة: {', '.join(removed_roles)}\n"
-        if not msg:
-            msg = "لم يتم تغيير أي شيء."
-            
-        await interaction.followup.send(msg, ephemeral=True)
-    
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Acknowledge immediately if not already done
-        if not interaction.response.is_done():
-             await interaction.response.defer(ephemeral=True)
-        return True
-
-class RoleView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None) # Persistent View
-        self.add_item(RoleSelect())
+# (Removed RoleSelect and RoleView classes)
 
 # --- Text Command Fallback (Emergency Solution) ---
-@bot.command(name="setup")
-@commands.has_permissions(administrator=True)
-async def setup_ranks_text(ctx):
-    """Alternative text command to setup ranks instantly."""
-    view = RoleView()
-    embed = discord.Embed(
-        title="🎮 اختر رتبتك | Choose Your Rank",
-        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-        color=discord.Color.blue()
-    )
-    if ctx.guild.icon:
-        embed.set_thumbnail(url=ctx.guild.icon.url)
-    
-    await ctx.send(embed=embed, view=view)
-    await ctx.message.delete() # Delete the command message to keep chat clean
+# (Removed setup command)
 
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
@@ -706,40 +603,21 @@ async def on_ready():
 
     print(f'Logged in as {bot.user.name}')
     
+    # 1. Clean up global commands (Fix duplicates)
+    # This removes global commands so only guild commands remain (faster & cleaner)
+    try:
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync(guild=None)
+        print("🧹 Cleared global commands to fix duplicates.")
+    except Exception as e:
+        print(f"⚠️ Error clearing global commands: {e}")
+
     # Register the persistent view for roles so it works after restart
-    bot.add_view(RoleView())
-    print("✅ RoleView registered.")
+    # bot.add_view(RoleView()) # Removed RoleView
+    # print("✅ RoleView registered.")
 
     # --- Auto-Send Rank Panel ---
-    for guild in bot.guilds:
-        # Try to find the channel (matches "choose-your-rank" or similar)
-        channel = discord.utils.get(guild.text_channels, name="choose-your-rank")
-        
-        if channel:
-            print(f"Found rank channel in {guild.name}: {channel.name}")
-            try:
-                # Permission check
-                perms = channel.permissions_for(guild.me)
-                if perms.send_messages and perms.manage_messages:
-                    # 1. Purge old bot messages to prevent duplicates
-                    await channel.purge(limit=10, check=lambda m: m.author == bot.user)
-                    
-                    # 2. Send the new panel
-                    view = RoleView()
-                    embed = discord.Embed(
-                        title="🎮 اختر رتبتك | Choose Your Rank",
-                        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-                        color=discord.Color.blue()
-                    )
-                    if guild.icon:
-                        embed.set_thumbnail(url=guild.icon.url)
-                    
-                    await channel.send(embed=embed, view=view)
-                    print(f"✅ Auto-sent rank panel to {guild.name}")
-                else:
-                    print(f"⚠️ Missing permissions in {channel.name} (Need Send & Manage Messages)")
-            except Exception as e:
-                print(f"❌ Error auto-sending rank panel: {e}")
+    # (Removed auto-send rank panel)
 
     # Sync commands to all guilds immediately (Instant Update)
     for guild in bot.guilds:
