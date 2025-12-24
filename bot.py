@@ -178,10 +178,17 @@ prayer_pause = False
 # --- Text Command Fallback (Emergency Solution) ---
 # (Removed setup command)
 
+# --- Security: Admin Code ---
+ADMIN_CODE = os.getenv("ADMIN_CODE", "12345") # Default code if not set
+
 @bot.command(name="fix")
 @commands.has_permissions(administrator=True)
-async def fix_duplicates(ctx):
-    """Smart fix for duplicates: Removes Guild commands, keeps Global."""
+async def fix_duplicates(ctx, code: str = None):
+    """Smart fix for duplicates. Usage: !fix <code>"""
+    if code != ADMIN_CODE:
+        await ctx.send("🔒 عذراً، الكود غير صحيح! لا يمكنك استخدام هذا الأمر.")
+        return
+
     await ctx.send("🔧 جاري إصلاح التكرار (مسح نسخ السيرفر الزائدة)...")
     
     try:
@@ -198,9 +205,14 @@ async def fix_duplicates(ctx):
         await ctx.send(f"❌ حدث خطأ: {e}")
 
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
-async def sync_commands(interaction: discord.Interaction):
+@app_commands.describe(code="كود الأمان")
+async def sync_commands(interaction: discord.Interaction, code: str):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+    
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
         
     await interaction.response.defer(ephemeral=True)
@@ -211,10 +223,15 @@ async def sync_commands(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ حدث خطأ: {e}")
 
 @bot.tree.command(name="debug", description="فحص مشاكل الصوت (للمشرفين فقط)")
-async def debug_bot(interaction: discord.Interaction):
+@app_commands.describe(code="كود الأمان")
+async def debug_bot(interaction: discord.Interaction, code: str):
     """Checks environment variables and files."""
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
     report = "🔍 **تقرير الفحص:**\n"
@@ -238,19 +255,12 @@ async def debug_bot(interaction: discord.Interaction):
     # 3. Audio Files
     files = [f for f in os.listdir('.') if f.endswith('.mp3')]
     report += f"- **ملفات الصوت:** {', '.join(files) if files else '❌ لا يوجد'}\n"
-    
-    # 4. Try running FFmpeg (Removed old block)
-    # try:
-    #     import subprocess
-    #     result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
-    #     report += f"- **FFmpeg Version:** `{result.stdout.splitlines()[0]}`\n"
-    # except Exception as e:
-    #     report += f"- **FFmpeg Run Error:** `{e}`\n"
 
     await interaction.response.send_message(report, ephemeral=True)
 
 @bot.tree.command(name="stop", description="إيقاف الترحيب مؤقتاً (للمشرفين فقط)")
-async def stop_bot(interaction: discord.Interaction):
+@app_commands.describe(code="كود الأمان")
+async def stop_bot(interaction: discord.Interaction, code: str):
     """Stops the bot from welcoming users."""
     global bot_active
     
@@ -258,11 +268,16 @@ async def stop_bot(interaction: discord.Interaction):
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
+        return
+
     bot_active = False
     await interaction.response.send_message("تم إيقاف الترحيب مؤقتاً 🛑")
 
 @bot.tree.command(name="start", description="تفعيل الترحيب من جديد (للمشرفين فقط)")
-async def start_bot(interaction: discord.Interaction):
+@app_commands.describe(code="كود الأمان")
+async def start_bot(interaction: discord.Interaction, code: str):
     """Resumes the bot welcoming users."""
     global bot_active
     
@@ -270,15 +285,23 @@ async def start_bot(interaction: discord.Interaction):
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
+        return
+
     bot_active = True
     await interaction.response.send_message("تم تفعيل الترحيب من جديد ✅")
 
 @bot.tree.command(name="say", description="جعل البوت يرسل رسالة في روم محدد (للمشرفين فقط)")
-@app_commands.describe(channel="الروم الذي تريد الإرسال فيه", message="الرسالة التي تريد إرسالها", image="صورة مرفقة (اختياري)")
-async def say_command(interaction: discord.Interaction, message: str, channel: discord.TextChannel = None, image: discord.Attachment = None):
+@app_commands.describe(channel="الروم الذي تريد الإرسال فيه", message="الرسالة التي تريد إرسالها", image="صورة مرفقة (اختياري)", code="كود الأمان")
+async def say_command(interaction: discord.Interaction, message: str, code: str, channel: discord.TextChannel = None, image: discord.Attachment = None):
     """Makes the bot send a message to a channel."""
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
     target_channel = channel or interaction.channel
@@ -480,10 +503,15 @@ async def force_sync_text(ctx):
     app_commands.Choice(name="المغرب", value="Maghrib"),
     app_commands.Choice(name="العشاء", value="Isha")
 ])
-async def test_notification(interaction: discord.Interaction, prayer: app_commands.Choice[str]):
+@app_commands.describe(code="كود الأمان")
+async def test_notification(interaction: discord.Interaction, prayer: app_commands.Choice[str], code: str):
     """Manually triggers the text notification for testing."""
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
     # Acknowledge the command immediately
@@ -502,10 +530,15 @@ async def test_notification(interaction: discord.Interaction, prayer: app_comman
     app_commands.Choice(name="المغرب", value="Maghrib"),
     app_commands.Choice(name="العشاء", value="Isha")
 ])
-async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Choice[str]):
+@app_commands.describe(code="كود الأمان")
+async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Choice[str], code: str):
     """Manually triggers the prayer voice notification immediately."""
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
     # Acknowledge the command immediately
