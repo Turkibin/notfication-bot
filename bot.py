@@ -178,6 +178,31 @@ prayer_pause = False
 # --- Text Command Fallback (Emergency Solution) ---
 # (Removed setup command)
 
+@bot.command(name="clear_all")
+@commands.has_permissions(administrator=True)
+async def clear_all_commands(ctx):
+    """Wipes ALL commands (Global & Guild) and re-syncs fresh."""
+    await ctx.send("🧹 جاري مسح جميع الأوامر وتنظيف التكرار... (قد يستغرق دقيقة)")
+    
+    try:
+        # 1. Clear Global
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync(guild=None)
+        
+        # 2. Clear Guild-specific commands for ALL guilds
+        for guild in bot.guilds:
+            bot.tree.clear_commands(guild=guild)
+            await bot.tree.sync(guild=guild)
+            
+        # 3. Re-add commands to current guild ONLY (Fast Sync)
+        bot.tree.copy_global_to(guild=ctx.guild)
+        synced = await bot.tree.sync(guild=ctx.guild)
+        
+        await ctx.send(f"✅ تم التنظيف! الآن يوجد {len(synced)} أمر فقط في هذا السيرفر.\n(إذا لسا تشوف تكرار، قفل ديسكورد وافتحه بالكامل - Ctrl+R)")
+        
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ: {e}")
+
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
