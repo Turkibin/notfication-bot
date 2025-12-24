@@ -49,14 +49,42 @@ if GEMINI_API_KEY:
         "top_k": 40,
         "max_output_tokens": 1024,
     }
-    ai_model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-001",
-        generation_config=generation_config,
-        system_instruction="أنت بوت إسلامي مفيد اسمه 'Rova'. مهمتك مساعدة المستخدمين في الأسئلة الدينية، مواقيت الصلاة، والنصائح العامة بأسلوب مهذب ومحترم. تحدث دائماً باللغة العربية بطلاقة، ويمكنك استخدام الإيموجي المناسب."
-    )
-    print("✅ Gemini AI Configured Successfully.")
+    # --- Gemini AI Configuration (Using REST API directly) ---
+    import aiohttp
+    
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+
+    async def get_gemini_response(prompt):
+        if not GEMINI_API_KEY:
+            return "عذراً، مفتاح الذكاء الاصطناعي مفقود."
+        
+        headers = {'Content-Type': 'application/json'}
+        data = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 1024
+            }
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(GEMINI_URL, json=data, headers=headers) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    return f"خطأ من جوجل: {resp.status} - {error_text}"
+                
+                result = await resp.json()
+                try:
+                    return result['candidates'][0]['content']['parts'][0]['text']
+                except:
+                    return "عذراً، لم أستطع فهم الرد."
+
+    # Remove old ai_model init
+    ai_model = True # Just a flag to say AI is enabled
+    print("✅ Gemini AI Configured (REST Mode).")
 else:
-    ai_model = None
+    ai_model = False
     print("⚠️ WARNING: GEMINI_API_KEY is missing. AI features will be disabled.")
 
 import ctypes.util
@@ -288,8 +316,8 @@ async def ask_ai(interaction: discord.Interaction, question: str):
     
     try:
         # Generate response
-        response = await ai_model.generate_content_async(question)
-        answer = response.text
+        prompt = f"أنت بوت إسلامي مفيد اسمه Rova. جاوب على هذا السؤال: {question}"
+        answer = await get_gemini_response(prompt)
         
         # Split message if too long (Discord limit is 2000 chars)
         if len(answer) > 1900:
@@ -320,8 +348,8 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                response = await ai_model.generate_content_async(question)
-                answer = response.text
+                prompt = f"أنت بوت إسلامي مفيد اسمه Rova. جاوب على هذا السؤال: {question}"
+                answer = await get_gemini_response(prompt)
                 
                 if len(answer) > 1900:
                     parts = [answer[i:i+1900] for i in range(0, len(answer), 1900)]
