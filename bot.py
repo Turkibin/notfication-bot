@@ -53,7 +53,7 @@ if GEMINI_API_KEY:
     import aiohttp
     
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     async def get_gemini_response(prompt):
         if not GEMINI_API_KEY:
