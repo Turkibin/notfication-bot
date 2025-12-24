@@ -231,6 +231,12 @@ class RoleSelect(discord.ui.Select):
             msg = "لم يتم تغيير أي شيء."
             
         await interaction.followup.send(msg, ephemeral=True)
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Acknowledge immediately if not already done
+        if not interaction.response.is_done():
+             await interaction.response.defer(ephemeral=True)
+        return True
 
 class RoleView(discord.ui.View):
     def __init__(self):
