@@ -282,37 +282,24 @@ async def setup_ranks_text(ctx):
     await ctx.send(embed=embed, view=view)
     await ctx.message.delete() # Delete the command message to keep chat clean
 
-@bot.command(name="clear_all")
+@bot.command(name="fix")
 @commands.has_permissions(administrator=True)
-async def clear_all_commands(ctx):
-    """Wipes ALL commands (Global & Guild) and re-syncs fresh."""
-    await ctx.send("🧹 جاري مسح جميع الأوامر وتنظيف التكرار... (قد يستغرق دقيقة)")
+async def fix_duplicates(ctx):
+    """Smart fix for duplicates: Removes Guild commands, keeps Global."""
+    await ctx.send("🔧 جاري إصلاح التكرار (مسح نسخ السيرفر الزائدة)...")
     
     try:
-        # 1. Clear Global
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync(guild=None)
+        # 1. Clear Guild-specific commands ONLY (Removes the duplicate layer)
+        bot.tree.clear_commands(guild=ctx.guild)
+        await bot.tree.sync(guild=ctx.guild)
         
-        # 2. Clear Guild-specific commands for ALL guilds
-        for guild in bot.guilds:
-            bot.tree.clear_commands(guild=guild)
-            await bot.tree.sync(guild=guild)
-            
-        # 3. Re-add commands to current guild ONLY (Fast Sync)
-        bot.tree.copy_global_to(guild=ctx.guild)
-        synced = await bot.tree.sync(guild=ctx.guild)
+        # 2. Re-sync Global to ensure originals are there
+        synced = await bot.tree.sync()
         
-        await ctx.send(f"✅ تم التنظيف! الآن يوجد {len(synced)} أمر فقط في هذا السيرفر.\n(إذا لسا تشوف تكرار، قفل ديسكورد وافتحه بالكامل - Ctrl+R)")
+        await ctx.send(f"✅ تم الإصلاح! تم حذف النسخ المكررة والإبقاء على {len(synced)} أمر أساسي.\n(سوي Refresh للديسكورد الآن - Ctrl+R)")
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {e}")
-        
-    # FORCE RESYNC NOW
-    try:
-        synced = await bot.tree.sync()
-        print(f"Force synced {len(synced)} commands.")
-    except:
-        pass
 
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
