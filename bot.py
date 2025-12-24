@@ -304,18 +304,48 @@ async def on_voice_state_update(member, before, after):
 
 # --- Prayer Times Feature (Voice Only) ---
 
-async def send_prayer_notifications(guild, prayer_name):
+PRAYER_DATA = {
+    "Fajr": {
+        "ar": "الفجر",
+        "msg": "قال رسول الله ﷺ: «ركعتا الفجر خير من الدنيا وما فيها»."
+    },
+    "Dhuhr": {
+        "ar": "الظهر",
+        "msg": "قال رسول الله ﷺ: «وقت تفتح فيه أبواب السماء، فأحب أن يصعد لي فيه عمل صالح»."
+    },
+    "Asr": {
+        "ar": "العصر",
+        "msg": "قال الله تعالى: ﴿حَافِظُوا عَلَى الصَّلَوَاتِ وَالصَّلَاةِ الْوُسْطَىٰ﴾."
+    },
+    "Maghrib": {
+        "ar": "المغرب",
+        "msg": "تذكر قول الله تعالى: ﴿وَأَقِمِ الصَّلَاةَ طَرَفَيِ النَّهَارِ وَزُلَفًا مِنَ اللَّيْلِ﴾."
+    },
+    "Isha": {
+        "ar": "العشاء",
+        "msg": "قال رسول الله ﷺ: «من صلى العشاء في جماعة فكأنما قام نصف الليل»."
+    }
+}
+
+async def send_prayer_notifications(guild, prayer_name_en):
     """Sends text notifications to specific channels."""
     try:
+        # Get Arabic name and message
+        prayer_info = PRAYER_DATA.get(prayer_name_en, {"ar": prayer_name_en, "msg": "حي على الصلاة، حي على الفلاح."})
+        prayer_ar = prayer_info["ar"]
+        prayer_msg = prayer_info["msg"]
+        
+        notification_text = f"حان الآن موعد صلاة **{prayer_ar}** حسب توقيت الرياض 🕌\n\n✨ {prayer_msg}\n\n@everyone"
+
         # 1. General Chat (Keep message)
         chat_channel = discord.utils.get(guild.text_channels, name="chat")
         if chat_channel and chat_channel.permissions_for(guild.me).send_messages:
-            await chat_channel.send(f"حان الآن موعد صلاة **{prayer_name}** حسب توقيت الرياض 🕌\n@everyone")
+            await chat_channel.send(notification_text)
 
         # 2. Athkar Chat (Delete after 20 mins)
         athkar_channel = discord.utils.get(guild.text_channels, name="اذكار")
         if athkar_channel and athkar_channel.permissions_for(guild.me).send_messages:
-            await athkar_channel.send(f"حان الآن موعد صلاة **{prayer_name}** حسب توقيت الرياض 🕌\n@everyone", delete_after=1200)
+            await athkar_channel.send(notification_text, delete_after=1200)
             
     except Exception as e:
         print(f"Notification error in {guild.name}: {e}")
@@ -398,7 +428,9 @@ async def test_notification(interaction: discord.Interaction, prayer: app_comman
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
-    await interaction.response.send_message(f"جاري إرسال تنبيهات الصلاة لـ **{prayer.name}**... 📨", ephemeral=True)
+    # Acknowledge the command immediately
+    prayer_info = PRAYER_DATA.get(prayer.value, {"ar": prayer.name})
+    await interaction.response.send_message(f"جاري إرسال تنبيهات الصلاة لـ **{prayer_info['ar']}**... 📨", ephemeral=True)
     
     await send_prayer_notifications(interaction.guild, prayer.value)
     
@@ -419,7 +451,8 @@ async def test_prayer(interaction: discord.Interaction, prayer: app_commands.Cho
         return
 
     # Acknowledge the command immediately
-    await interaction.response.send_message(f"جاري الدخول للرومات للأذان لصلاة **{prayer.name}**... 🚀", ephemeral=True)
+    prayer_info = PRAYER_DATA.get(prayer.value, {"ar": prayer.name})
+    await interaction.response.send_message(f"جاري الدخول للرومات للأذان لصلاة **{prayer_info['ar']}**... 🚀", ephemeral=True)
     
     prayer_name_en = prayer.value
     guild = interaction.guild
