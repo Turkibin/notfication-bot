@@ -152,13 +152,16 @@ prayer_pause = False
 @bot.tree.command(name="setup_ranks", description="إنشاء لوحة اختيار رتب الألعاب (للمشرفين فقط)")
 async def setup_ranks(interaction: discord.Interaction):
     """Sets up the role selection panel."""
+    # Defer immediately to prevent timeout
+    await interaction.response.defer(ephemeral=True)
+    
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        await interaction.followup.send("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
     # Check for "Manage Roles" permission
     if not interaction.guild.me.guild_permissions.manage_roles:
-        await interaction.response.send_message("⚠️ عذراً، أحتاج صلاحية **Manage Roles** لأقوم بتوزيع الرتب!", ephemeral=True)
+        await interaction.followup.send("⚠️ عذراً، أحتاج صلاحية **Manage Roles** لأقوم بتوزيع الرتب!", ephemeral=True)
         return
 
     view = RoleView()
@@ -169,7 +172,7 @@ async def setup_ranks(interaction: discord.Interaction):
     )
     
     await interaction.channel.send(embed=embed, view=view)
-    await interaction.response.send_message("✅ تم إنشاء اللوحة بنجاح!", ephemeral=True)
+    await interaction.followup.send("✅ تم إنشاء اللوحة بنجاح!", ephemeral=True)
 
 # --- Role View & Buttons ---
 class RoleButton(discord.ui.Button):
