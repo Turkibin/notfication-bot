@@ -202,6 +202,13 @@ async def clear_all_commands(ctx):
         
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {e}")
+        
+    # FORCE RESYNC NOW
+    try:
+        synced = await bot.tree.sync()
+        print(f"Force synced {len(synced)} commands.")
+    except:
+        pass
 
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
