@@ -5,4 +5,4 @@ PyNaCl
 python-dotenv
 imageio-ffmpeg
 pytz
-google-generativeai
+google-generativeai>=0.7.0
