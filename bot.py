@@ -167,49 +167,75 @@ async def setup_ranks(interaction: discord.Interaction):
     view = RoleView()
     embed = discord.Embed(
         title="🎮 اختر رتبتك | Choose Your Rank",
-        description="اضغط على الزر للحصول على رتبة اللعبة.\nاضغط مرة أخرى لإزالتها.",
+        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
         color=discord.Color.blue()
     )
+    embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
     
     await interaction.channel.send(embed=embed, view=view)
     await interaction.followup.send("✅ تم إنشاء اللوحة بنجاح!", ephemeral=True)
 
-# --- Role View & Buttons ---
-class RoleButton(discord.ui.Button):
-    def __init__(self, role_name, custom_id, emoji=None):
-        super().__init__(label=role_name, style=discord.ButtonStyle.secondary, custom_id=custom_id, emoji=emoji)
-        self.role_name = role_name
+# --- Role View & Select Menu ---
+class RoleSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Rocket League", emoji="🚗", value="role_rocket", description="سيارات وكرة قدم"),
+            discord.SelectOption(label="FiveM", emoji="👮‍♂️", value="role_fivem", description="حياة واقعية GTA V"),
+            discord.SelectOption(label="Call of Duty", emoji="💀", value="role_cod", description="حروب وإطلاق نار"),
+            discord.SelectOption(label="Minecraft", emoji="🪓", value="role_minecraft", description="بناء ومغامرات"),
+            discord.SelectOption(label="Fortnite", emoji="🔫", value="role_fortnite", description="باتل رويال"),
+            discord.SelectOption(label="Overwatch", emoji="💥", value="role_overwatch", description="أبطال وقدرات"),
+        ]
+        super().__init__(placeholder="اختر رتبتك من هنا... | Select your rank...", min_values=0, max_values=len(options), custom_id="role_select_menu")
 
     async def callback(self, interaction: discord.Interaction):
-        # Find the role
-        role = discord.utils.get(interaction.guild.roles, name=self.role_name)
+        # Defer immediately to avoid interaction failed
+        await interaction.response.defer(ephemeral=True)
         
-        # If role doesn't exist, create it (Auto-setup)
-        if not role:
-            try:
-                role = await interaction.guild.create_role(name=self.role_name, mentionable=True)
-            except Exception as e:
-                await interaction.response.send_message(f"❌ حدث خطأ أثناء إنشاء الرتبة: {e}", ephemeral=True)
-                return
+        # Get all possible roles from options
+        all_role_values = [opt.value for opt in self.options]
+        
+        added_roles = []
+        removed_roles = []
+        
+        for value in all_role_values:
+            # Map values to role names
+            role_name = next(opt.label for opt in self.options if opt.value == value)
+            role = discord.utils.get(interaction.guild.roles, name=role_name)
+            
+            # Create role if missing
+            if not role:
+                try:
+                    role = await interaction.guild.create_role(name=role_name, mentionable=True)
+                except:
+                    continue
 
-        # Toggle Role
-        if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
-            await interaction.response.send_message(f"❌ تم إزالة رتبة **{self.role_name}**.", ephemeral=True)
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"✅ تم إضافة رتبة **{self.role_name}**.", ephemeral=True)
+            if value in self.values:
+                # User selected this role -> Add it if not present
+                if role not in interaction.user.roles:
+                    await interaction.user.add_roles(role)
+                    added_roles.append(role_name)
+            else:
+                # User did NOT select this role -> Remove it if present
+                if role in interaction.user.roles:
+                    await interaction.user.remove_roles(role)
+                    removed_roles.append(role_name)
+
+        # Build response message
+        msg = ""
+        if added_roles:
+            msg += f"✅ تمت إضافة: {', '.join(added_roles)}\n"
+        if removed_roles:
+            msg += f"❌ تمت إزالة: {', '.join(removed_roles)}\n"
+        if not msg:
+            msg = "لم يتم تغيير أي شيء."
+            
+        await interaction.followup.send(msg, ephemeral=True)
 
 class RoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None) # Persistent View
-        # Add buttons for games
-        self.add_item(RoleButton("Rocket League", "role_rocket", "�"))
-        self.add_item(RoleButton("FiveM", "role_fivem", "👮‍♂️"))
-        self.add_item(RoleButton("Call of Duty", "role_cod", "�"))
-        self.add_item(RoleButton("Minecraft", "role_minecraft", "🪓"))
-        self.add_item(RoleButton("Fortnite", "role_fortnite", "🔫"))
-        self.add_item(RoleButton("Overwatch", "role_overwatch", "💥"))
+        self.add_item(RoleSelect())
 
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
