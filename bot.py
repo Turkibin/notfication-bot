@@ -843,17 +843,44 @@ async def on_ready():
     bot.add_view(RoleView()) 
     print("✅ RoleView registered.")
 
-    # --- Auto-Send Rank Panel ---
-    # (Removed auto-send rank panel)
+    # --- Auto-Send Rank Panel (Self-Check & Fix) ---
+    for guild in bot.guilds:
+        # 1. Search for channel
+        channel_name = "choose-your-rank"
+        channel = discord.utils.get(guild.text_channels, name=channel_name)
+        
+        if not channel:
+            print(f"⚠️ Channel '{channel_name}' NOT found in {guild.name}")
+            continue
 
-    # Sync commands to all guilds immediately (Instant Update)
-    # for guild in bot.guilds:
-    #     try:
-    #         bot.tree.copy_global_to(guild=guild)
-    #         await bot.tree.sync(guild=guild)
-    #         print(f"✅ Synced commands to guild: {guild.name}")
-    #     except Exception as e:
-    #         print(f"❌ Failed to sync to {guild.name}: {e}")
+        print(f"✅ Found channel '{channel.name}' in {guild.name}")
+        
+        # 2. Check Permissions
+        perms = channel.permissions_for(guild.me)
+        if not perms.send_messages or not perms.manage_messages:
+            print(f"❌ MISSING PERMISSIONS in {channel.name}: Send={perms.send_messages}, Manage={perms.manage_messages}")
+            # Try to alert owner in logs
+            continue
+
+        # 3. Try to Send
+        try:
+            # Purge old messages from bot
+            await channel.purge(limit=20, check=lambda m: m.author == bot.user)
+            
+            # Send Panel
+            embed = discord.Embed(
+                title="🎮 اختر ألعابك | Choose Your Games",
+                description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
+                color=discord.Color.gold()
+            )
+            if guild.icon:
+                embed.set_thumbnail(url=guild.icon.url)
+            
+            await channel.send(embed=embed, view=RoleView())
+            print(f"🚀 SUCCESS: Sent rank panel to {channel.name}")
+            
+        except Exception as e:
+            print(f"❌ ERROR sending rank panel: {e}")
 
     if not prayer_task.is_running():
         prayer_task.start()
