@@ -793,13 +793,13 @@ async def on_ready():
                 print(f"❌ Error auto-sending rank panel: {e}")
 
     # Sync commands to all guilds immediately (Instant Update)
-    for guild in bot.guilds:
-        try:
-            bot.tree.copy_global_to(guild=guild)
-            await bot.tree.sync(guild=guild)
-            print(f"✅ Synced commands to guild: {guild.name}")
-        except Exception as e:
-            print(f"❌ Failed to sync to {guild.name}: {e}")
+    # for guild in bot.guilds:
+    #     try:
+    #         bot.tree.copy_global_to(guild=guild)
+    #         await bot.tree.sync(guild=guild)
+    #         print(f"✅ Synced commands to guild: {guild.name}")
+    #     except Exception as e:
+    #         print(f"❌ Failed to sync to {guild.name}: {e}")
 
     if not prayer_task.is_running():
         prayer_task.start()
