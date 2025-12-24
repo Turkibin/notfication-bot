@@ -631,14 +631,16 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Global sync error: {e}")
 
-    # Also sync to guilds just in case
+    # --- CLEANUP DUPLICATES (The Safe Way) ---
+    # We remove guild-specific commands so only the Global ones remain.
+    # This fixes duplicates without wiping the bot.
     for guild in bot.guilds:
         try:
-            bot.tree.copy_global_to(guild=guild)
+            bot.tree.clear_commands(guild=guild)
             await bot.tree.sync(guild=guild)
-            print(f"✅ Synced to guild: {guild.name}")
+            print(f"🧹 Cleared local duplicate commands for: {guild.name}")
         except Exception as e:
-            print(f"❌ Failed to sync to {guild.name}: {e}")
+            print(f"❌ Failed to clear duplicates for {guild.name}: {e}")
 
     # Register the persistent view for roles so it works after restart
     # bot.add_view(RoleView()) # Removed RoleView
