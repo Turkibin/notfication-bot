@@ -710,6 +710,37 @@ async def on_ready():
     bot.add_view(RoleView())
     print("✅ RoleView registered.")
 
+    # --- Auto-Send Rank Panel ---
+    for guild in bot.guilds:
+        # Try to find the channel (matches "choose-your-rank" or similar)
+        channel = discord.utils.get(guild.text_channels, name="choose-your-rank")
+        
+        if channel:
+            print(f"Found rank channel in {guild.name}: {channel.name}")
+            try:
+                # Permission check
+                perms = channel.permissions_for(guild.me)
+                if perms.send_messages and perms.manage_messages:
+                    # 1. Purge old bot messages to prevent duplicates
+                    await channel.purge(limit=10, check=lambda m: m.author == bot.user)
+                    
+                    # 2. Send the new panel
+                    view = RoleView()
+                    embed = discord.Embed(
+                        title="🎮 اختر رتبتك | Choose Your Rank",
+                        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
+                        color=discord.Color.blue()
+                    )
+                    if guild.icon:
+                        embed.set_thumbnail(url=guild.icon.url)
+                    
+                    await channel.send(embed=embed, view=view)
+                    print(f"✅ Auto-sent rank panel to {guild.name}")
+                else:
+                    print(f"⚠️ Missing permissions in {channel.name} (Need Send & Manage Messages)")
+            except Exception as e:
+                print(f"❌ Error auto-sending rank panel: {e}")
+
     # Sync commands to all guilds immediately (Instant Update)
     for guild in bot.guilds:
         try:
