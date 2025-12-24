@@ -739,14 +739,23 @@ async def on_ready():
 
     print(f'Logged in as {bot.user.name}')
     
-    # 1. Clean up global commands (Fix duplicates)
-    # This removes global commands so only guild commands remain (faster & cleaner)
+    # --- IMMEDIATE FORCE SYNC (Old Reliable Way) ---
+    # No clearing, no complex logic. Just sync everything NOW.
+    print("🔄 Starting immediate command sync...")
     try:
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync(guild=None)
-        print("🧹 Cleared global commands to fix duplicates.")
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} commands globally!")
     except Exception as e:
-        print(f"⚠️ Error clearing global commands: {e}")
+        print(f"⚠️ Global sync error: {e}")
+
+    # Also sync to guilds just in case
+    for guild in bot.guilds:
+        try:
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
+            print(f"✅ Synced to guild: {guild.name}")
+        except Exception as e:
+            print(f"❌ Failed to sync to {guild.name}: {e}")
 
     # Register the persistent view for roles so it works after restart
     bot.add_view(RoleView())
