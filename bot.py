@@ -323,6 +323,55 @@ async def say_command(interaction: discord.Interaction, message: str, code: str,
     except Exception as e:
         await interaction.response.send_message(f"حدث خطأ أثناء الإرسال: {e}", ephemeral=True)
 
+@bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في الروم الصوتي")
+async def ajrr_command(interaction: discord.Interaction):
+    """Joins voice channel and plays ajrr.mp3."""
+    
+    # Check if user is in a voice channel
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("❌ يجب أن تكون في روم صوتي لاستخدام هذا الأمر!", ephemeral=True)
+        return
+
+    voice_channel = interaction.user.voice.channel
+    audio_file = "ajrr.mp3"
+    
+    if not os.path.exists(audio_file):
+        await interaction.response.send_message("⚠️ عذراً، ملف الصوت `ajrr.mp3` غير موجود في البوت.", ephemeral=True)
+        return
+
+    # Check permissions
+    permissions = voice_channel.permissions_for(interaction.guild.me)
+    if not permissions.connect or not permissions.speak:
+        await interaction.response.send_message(f"🚫 ليس لدي صلاحية الدخول أو التحدث في {voice_channel.mention}", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"جاري تشغيل الأجر في **{voice_channel.name}**... 🕌✨", ephemeral=True)
+
+    try:
+        # Disconnect if already connected elsewhere
+        if interaction.guild.voice_client:
+            await interaction.guild.voice_client.disconnect()
+        
+        # Connect
+        vc = await voice_channel.connect(self_deaf=True)
+        
+        # Play
+        executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
+        vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
+        
+        # Wait until done
+        while vc.is_playing():
+            await asyncio.sleep(1)
+            
+        await asyncio.sleep(1)
+        await vc.disconnect()
+        
+    except Exception as e:
+        print(f"Error in ajrr command: {e}")
+        # Try to clean up
+        if interaction.guild.voice_client:
+            await interaction.guild.voice_client.disconnect()
+
 @bot.event
 async def on_message(message):
     # Don't reply to self
