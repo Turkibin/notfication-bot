@@ -19,6 +19,24 @@ import pytz
 async def handle(request):
     return web.Response(text="Bot is running!")
 
+async def keep_alive_task():
+    """Pings the web server every 5 minutes to prevent sleep."""
+    url = f"http://0.0.0.0:{os.getenv('PORT', 8080)}"
+    # In production, use the actual Railway URL if available
+    railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+    if railway_url:
+        url = f"https://{railway_url}"
+        
+    print(f"⏰ Starting keep-alive pinger for: {url}")
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(url) as resp:
+                    pass # Just ping
+            except:
+                pass
+            await asyncio.sleep(300) # Ping every 5 minutes
+
 async def start_web_server():
     app = web.Application()
     app.router.add_get('/', handle)
@@ -28,6 +46,9 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"🌍 Web server started on port {port}")
+    
+    # Start the pinger
+    asyncio.create_task(keep_alive_task())
 
 # Configuration
 TOKEN = os.getenv('DISCORD_TOKEN')
