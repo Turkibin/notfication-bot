@@ -149,6 +149,64 @@ prayer_pause = False
 
 # --- Welcome Feature ---
 
+@bot.tree.command(name="setup_ranks", description="إنشاء لوحة اختيار رتب الألعاب (للمشرفين فقط)")
+async def setup_ranks(interaction: discord.Interaction):
+    """Sets up the role selection panel."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    # Check for "Manage Roles" permission
+    if not interaction.guild.me.guild_permissions.manage_roles:
+        await interaction.response.send_message("⚠️ عذراً، أحتاج صلاحية **Manage Roles** لأقوم بتوزيع الرتب!", ephemeral=True)
+        return
+
+    view = RoleView()
+    embed = discord.Embed(
+        title="🎮 اختر رتبتك | Choose Your Rank",
+        description="اضغط على الزر للحصول على رتبة اللعبة.\nاضغط مرة أخرى لإزالتها.",
+        color=discord.Color.blue()
+    )
+    
+    await interaction.channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ تم إنشاء اللوحة بنجاح!", ephemeral=True)
+
+# --- Role View & Buttons ---
+class RoleButton(discord.ui.Button):
+    def __init__(self, role_name, custom_id, emoji=None):
+        super().__init__(label=role_name, style=discord.ButtonStyle.secondary, custom_id=custom_id, emoji=emoji)
+        self.role_name = role_name
+
+    async def callback(self, interaction: discord.Interaction):
+        # Find the role
+        role = discord.utils.get(interaction.guild.roles, name=self.role_name)
+        
+        # If role doesn't exist, create it (Auto-setup)
+        if not role:
+            try:
+                role = await interaction.guild.create_role(name=self.role_name, mentionable=True)
+            except Exception as e:
+                await interaction.response.send_message(f"❌ حدث خطأ أثناء إنشاء الرتبة: {e}", ephemeral=True)
+                return
+
+        # Toggle Role
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"❌ تم إزالة رتبة **{self.role_name}**.", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ تم إضافة رتبة **{self.role_name}**.", ephemeral=True)
+
+class RoleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None) # Persistent View
+        # Add buttons for games
+        self.add_item(RoleButton("Valorant", "role_valorant", "🔫"))
+        self.add_item(RoleButton("Overwatch", "role_overwatch", "🛡️"))
+        self.add_item(RoleButton("Minecraft", "role_minecraft", "⛏️"))
+        self.add_item(RoleButton("Fortnite", "role_fortnite", "🏗️"))
+        self.add_item(RoleButton("Rocket League", "role_rocket", "⚽"))
+
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
@@ -574,6 +632,10 @@ async def on_ready():
 
     print(f'Logged in as {bot.user.name}')
     
+    # Register the persistent view for roles so it works after restart
+    bot.add_view(RoleView())
+    print("✅ RoleView registered.")
+
     # Sync commands to all guilds immediately (Instant Update)
     for guild in bot.guilds:
         try:
