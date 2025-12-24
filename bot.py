@@ -323,54 +323,58 @@ async def say_command(interaction: discord.Interaction, message: str, code: str,
     except Exception as e:
         await interaction.response.send_message(f"حدث خطأ أثناء الإرسال: {e}", ephemeral=True)
 
-@bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في الروم الصوتي")
+@bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في جميع الرومات الصوتية النشطة")
 async def ajrr_command(interaction: discord.Interaction):
-    """Joins voice channel and plays ajrr.mp3."""
+    """Plays ajrr.mp3 in ALL active voice channels."""
     
-    # Check if user is in a voice channel
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("❌ يجب أن تكون في روم صوتي لاستخدام هذا الأمر!", ephemeral=True)
-        return
-
-    voice_channel = interaction.user.voice.channel
+    guild = interaction.guild
     audio_file = "ajrr.mp3"
     
     if not os.path.exists(audio_file):
         await interaction.response.send_message("⚠️ عذراً، ملف الصوت `ajrr.mp3` غير موجود في البوت.", ephemeral=True)
         return
 
-    # Check permissions
-    permissions = voice_channel.permissions_for(interaction.guild.me)
-    if not permissions.connect or not permissions.speak:
-        await interaction.response.send_message(f"🚫 ليس لدي صلاحية الدخول أو التحدث في {voice_channel.mention}", ephemeral=True)
+    # Find ALL channels with people (No bots)
+    active_channels = [
+        vc for vc in guild.voice_channels 
+        if len(vc.members) > 0 and any(not m.bot for m in vc.members)
+    ]
+
+    if not active_channels:
+        await interaction.response.send_message("⚠️ ما فيه أحد في الرومات الصوتية حالياً!", ephemeral=True)
         return
 
-    await interaction.response.send_message(f"جاري تشغيل الأجر في **{voice_channel.name}**... 🕌✨", ephemeral=True)
+    await interaction.response.send_message(f"جاري نشر الأجر في **{len(active_channels)}** رومات... 🕌✨", ephemeral=True)
 
-    try:
-        # Disconnect if already connected elsewhere
-        if interaction.guild.voice_client:
-            await interaction.guild.voice_client.disconnect()
-        
-        # Connect
-        vc = await voice_channel.connect(self_deaf=True)
-        
-        # Play
-        executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
-        vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
-        
-        # Wait until done
-        while vc.is_playing():
-            await asyncio.sleep(1)
+    # Loop through all channels
+    for v_channel in active_channels:
+        try:
+            # Force disconnect if stuck
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
             
-        await asyncio.sleep(1)
-        await vc.disconnect()
-        
-    except Exception as e:
-        print(f"Error in ajrr command: {e}")
-        # Try to clean up
-        if interaction.guild.voice_client:
-            await interaction.guild.voice_client.disconnect()
+            print(f"Joining {v_channel.name} for AJRR...")
+            
+            # Connect
+            vc = await v_channel.connect(self_deaf=True)
+            
+            # Play
+            executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
+            vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
+            
+            # Wait until done
+            while vc.is_playing():
+                await asyncio.sleep(1)
+            
+            await asyncio.sleep(0.5) # Quick pause
+            await vc.disconnect()
+            
+        except Exception as e:
+            print(f"Error in ajrr command for {v_channel.name}: {e}")
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+    
+    await interaction.followup.send("✅ تم الانتهاء من نشر الأجر في جميع الرومات.", ephemeral=True)
 
 @bot.event
 async def on_message(message):
