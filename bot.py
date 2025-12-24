@@ -387,17 +387,20 @@ class RoleView(discord.ui.View):
 @bot.tree.command(name="setup_ranks", description="إنشاء قائمة اختيار رتب الألعاب")
 @app_commands.describe(code="كود الأمان", channel="الروم (اختياري)")
 async def setup_ranks(interaction: discord.Interaction, code: str, channel: discord.TextChannel = None):
+    # Defer immediately to prevent timeout
+    await interaction.response.defer(ephemeral=True)
+
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        await interaction.followup.send("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
     if code != ADMIN_CODE:
-        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
+        await interaction.followup.send("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
     target = channel or interaction.channel
     if not target.permissions_for(interaction.guild.me).send_messages:
-        await interaction.response.send_message("🚫 لا أستطيع الإرسال في هذا الروم.", ephemeral=True)
+        await interaction.followup.send("🚫 لا أستطيع الإرسال في هذا الروم.", ephemeral=True)
         return
 
     embed = discord.Embed(
@@ -409,7 +412,27 @@ async def setup_ranks(interaction: discord.Interaction, code: str, channel: disc
         embed.set_thumbnail(url=interaction.guild.icon.url)
 
     await target.send(embed=embed, view=RoleView())
-    await interaction.response.send_message("✅ تم إنشاء قائمة الألعاب بنجاح.", ephemeral=True)
+    await interaction.followup.send("✅ تم إنشاء قائمة الألعاب بنجاح.", ephemeral=True)
+
+# --- Fallback Text Command ---
+@bot.command(name="setup_ranks")
+@commands.has_permissions(administrator=True)
+async def setup_ranks_text(ctx, code: str = None):
+    """Text command fallback: !setup_ranks <code>"""
+    if code != ADMIN_CODE:
+        await ctx.send("🔒 الكود غير صحيح أو مفقود! الاستخدام: `!setup_ranks <code>`")
+        return
+
+    embed = discord.Embed(
+        title="🎮 اختر ألعابك | Choose Your Games",
+        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
+        color=discord.Color.gold()
+    )
+    if ctx.guild.icon:
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+
+    await ctx.send(embed=embed, view=RoleView())
+    await ctx.message.delete() # Clean up command
 
 @bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في جميع الرومات الصوتية النشطة")
 async def ajrr_command(interaction: discord.Interaction):
