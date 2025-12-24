@@ -493,9 +493,13 @@ async def prayer_task():
     city = "Riyadh"
     country = "SA"
     
-    now = datetime.datetime.now()
+    # Force Riyadh Timezone
+    tz = pytz.timezone('Asia/Riyadh')
+    now = datetime.datetime.now(tz)
     current_time = now.strftime("%H:%M")
     
+    print(f"Checking prayer time... Current Riyadh Time: {current_time}")
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"http://api.aladhan.com/v1/timingsByCity?city={city}&country={country}&method=4") as resp:
