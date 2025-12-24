@@ -350,7 +350,7 @@ async def send_prayer_notifications(guild, prayer_name_en):
         # 1. General Chat (Keep message)
         chat_channel = discord.utils.get(guild.text_channels, name="chat")
         if chat_channel and chat_channel.permissions_for(guild.me).send_messages:
-            await chat_channel.send(notification_text)
+            await chat_channel.send(notification_text, delete_after=1200)
 
         # 2. Athkar Chat (Delete after 20 mins)
         athkar_channel = discord.utils.get(guild.text_channels, name="اذكار")
