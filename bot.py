@@ -179,7 +179,7 @@ prayer_pause = False
 # (Removed setup command)
 
 # --- Security: Admin Code ---
-ADMIN_CODE = os.getenv("ADMIN_CODE", "12345") # Default code if not set
+ADMIN_CODE = os.getenv("ADMIN_CODE", "th1") # Default code if not set
 
 @bot.command(name="fix")
 @commands.has_permissions(administrator=True)
