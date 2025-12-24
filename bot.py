@@ -243,6 +243,23 @@ class RoleView(discord.ui.View):
         super().__init__(timeout=None) # Persistent View
         self.add_item(RoleSelect())
 
+# --- Text Command Fallback (Emergency Solution) ---
+@bot.command(name="setup")
+@commands.has_permissions(administrator=True)
+async def setup_ranks_text(ctx):
+    """Alternative text command to setup ranks instantly."""
+    view = RoleView()
+    embed = discord.Embed(
+        title="🎮 اختر رتبتك | Choose Your Rank",
+        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
+        color=discord.Color.blue()
+    )
+    if ctx.guild.icon:
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+    
+    await ctx.send(embed=embed, view=view)
+    await ctx.message.delete() # Delete the command message to keep chat clean
+
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
