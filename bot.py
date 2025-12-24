@@ -201,11 +201,12 @@ class RoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None) # Persistent View
         # Add buttons for games
-        self.add_item(RoleButton("Valorant", "role_valorant", "🔫"))
-        self.add_item(RoleButton("Overwatch", "role_overwatch", "🛡️"))
-        self.add_item(RoleButton("Minecraft", "role_minecraft", "⛏️"))
-        self.add_item(RoleButton("Fortnite", "role_fortnite", "🏗️"))
-        self.add_item(RoleButton("Rocket League", "role_rocket", "⚽"))
+        self.add_item(RoleButton("Rocket League", "role_rocket", "�"))
+        self.add_item(RoleButton("FiveM", "role_fivem", "👮‍♂️"))
+        self.add_item(RoleButton("Call of Duty", "role_cod", "�"))
+        self.add_item(RoleButton("Minecraft", "role_minecraft", "🪓"))
+        self.add_item(RoleButton("Fortnite", "role_fortnite", "🔫"))
+        self.add_item(RoleButton("Overwatch", "role_overwatch", "💥"))
 
 @bot.tree.command(name="sync", description="تحديث أوامر البوت يدوياً (للمشرفين فقط)")
 async def sync_commands(interaction: discord.Interaction):
