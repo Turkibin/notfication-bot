@@ -493,6 +493,26 @@ async def on_message(message):
     if message.author == bot.user:
         return
     
+    # --- MAGIC BYPASS FOR SETUP ---
+    # If the user says EXACTLY "!setup_ranks th1", we force run the setup.
+    # This bypasses intent issues sometimes or command sync lag.
+    if message.content.strip() == "!setup_ranks th1":
+        if message.author.guild_permissions.administrator:
+            try:
+                embed = discord.Embed(
+                    title="🎮 اختر ألعابك | Choose Your Games",
+                    description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
+                    color=discord.Color.gold()
+                )
+                if message.guild.icon:
+                    embed.set_thumbnail(url=message.guild.icon.url)
+                
+                await message.channel.send(embed=embed, view=RoleView())
+                await message.delete()
+                return # Stop processing
+            except Exception as e:
+                print(f"Magic Setup Error: {e}")
+    
     # Process other commands (needed for prefix commands like !force_sync)
     await bot.process_commands(message)
 
