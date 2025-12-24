@@ -14,7 +14,6 @@ import ctypes.util
 import subprocess
 import imageio_ffmpeg
 import pytz
-import google.generativeai as genai
 
 # --- Web Server for Keep Alive (Railway Requirement) ---
 async def handle(request):
@@ -37,55 +36,6 @@ if not TOKEN:
     print("❌ ERROR: DISCORD_TOKEN is missing! Make sure to add it in Railway Variables.")
 else:
     print("✅ Token found, starting bot...")
-
-# --- Gemini AI Configuration ---
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    # Set up the model with a specific persona
-    generation_config = {
-        "temperature": 0.7,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 1024,
-    }
-    # --- Gemini AI Configuration (Using REST API directly) ---
-    import aiohttp
-    
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-
-    async def get_gemini_response(prompt):
-        if not GEMINI_API_KEY:
-            return "عذراً، مفتاح الذكاء الاصطناعي مفقود."
-        
-        headers = {'Content-Type': 'application/json'}
-        data = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 1024
-            }
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(GEMINI_URL, json=data, headers=headers) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    return f"خطأ من جوجل: {resp.status} - {error_text}"
-                
-                result = await resp.json()
-                try:
-                    return result['candidates'][0]['content']['parts'][0]['text']
-                except:
-                    return "عذراً، لم أستطع فهم الرد."
-
-    # Remove old ai_model init
-    ai_model = True # Just a flag to say AI is enabled
-    print("✅ Gemini AI Configured (REST Mode).")
-else:
-    ai_model = False
-    print("⚠️ WARNING: GEMINI_API_KEY is missing. AI features will be disabled.")
 
 import ctypes.util
 
@@ -302,64 +252,11 @@ async def say_command(interaction: discord.Interaction, message: str, channel: d
     except Exception as e:
         await interaction.response.send_message(f"حدث خطأ أثناء الإرسال: {e}", ephemeral=True)
 
-# --- AI Features ---
-
-@bot.tree.command(name="ask", description="اسأل البوت أي سؤال (ديني أو عام) باستخدام الذكاء الاصطناعي")
-@app_commands.describe(question="سؤالك للبوت")
-async def ask_ai(interaction: discord.Interaction, question: str):
-    """Asks Gemini AI a question."""
-    if not ai_model:
-        await interaction.response.send_message("عذراً، ميزة الذكاء الاصطناعي غير مفعلة حالياً (المفتاح ناقص) 🚫", ephemeral=True)
-        return
-
-    await interaction.response.defer() # Defer because AI might take a few seconds
-    
-    try:
-        # Generate response
-        prompt = f"أنت بوت إسلامي مفيد اسمه Rova. جاوب على هذا السؤال: {question}"
-        answer = await get_gemini_response(prompt)
-        
-        # Split message if too long (Discord limit is 2000 chars)
-        if len(answer) > 1900:
-            parts = [answer[i:i+1900] for i in range(0, len(answer), 1900)]
-            await interaction.followup.send(f"**سؤالك:** {question}\n\n**الجواب:** {parts[0]}")
-            for part in parts[1:]:
-                await interaction.channel.send(part)
-        else:
-            await interaction.followup.send(f"**سؤالك:** {question}\n\n**الجواب:**\n{answer}")
-            
-    except Exception as e:
-        await interaction.followup.send(f"حدث خطأ أثناء معالجة السؤال: {e}")
-
 @bot.event
 async def on_message(message):
     # Don't reply to self
     if message.author == bot.user:
         return
-
-    # Check if bot is mentioned (Reply with AI)
-    if bot.user.mentioned_in(message) and ai_model:
-        # Clean the message content (remove the mention)
-        question = message.content.replace(f'<@{bot.user.id}>', '').strip()
-        
-        if not question:
-            await message.reply("تفضل، كيف أقدر أساعدك؟ 😊")
-            return
-
-        async with message.channel.typing():
-            try:
-                prompt = f"أنت بوت إسلامي مفيد اسمه Rova. جاوب على هذا السؤال: {question}"
-                answer = await get_gemini_response(prompt)
-                
-                if len(answer) > 1900:
-                    parts = [answer[i:i+1900] for i in range(0, len(answer), 1900)]
-                    await message.reply(parts[0])
-                    for part in parts[1:]:
-                        await message.channel.send(part)
-                else:
-                    await message.reply(answer)
-            except Exception as e:
-                await message.reply("عذراً، واجهت مشكلة في التفكير. حاول مرة أخرى لاحقاً.")
     
     # Process other commands (needed for prefix commands like !force_sync)
     await bot.process_commands(message)
