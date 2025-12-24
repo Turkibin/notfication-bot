@@ -50,7 +50,7 @@ if GEMINI_API_KEY:
         "max_output_tokens": 1024,
     }
     ai_model = genai.GenerativeModel(
-        model_name="gemini-pro",
+        model_name="gemini-1.5-flash-latest",
         generation_config=generation_config,
         system_instruction="أنت بوت إسلامي مفيد اسمه 'Rova'. مهمتك مساعدة المستخدمين في الأسئلة الدينية، مواقيت الصلاة، والنصائح العامة بأسلوب مهذب ومحترم. تحدث دائماً باللغة العربية بطلاقة، ويمكنك استخدام الإيموجي المناسب."
     )
