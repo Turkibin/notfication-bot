@@ -487,6 +487,41 @@ async def on_voice_state_update(member, before, after):
     if member.bot:
         return
 
+    # Check if BOT ITSELF was disconnected/moved while locked
+    if member.id == bot.user.id and before.channel is not None and after.channel != before.channel:
+        # If locked and moved/disconnected
+        if LOCKED_CHANNEL_ID and before.channel.id == LOCKED_CHANNEL_ID:
+             # Determine if it was a disconnect or move
+             is_disconnect = after.channel is None
+             
+             try:
+                 # Wait a bit for audit log
+                 await asyncio.sleep(2)
+                 
+                 action_type = discord.AuditLogAction.member_disconnect if is_disconnect else discord.AuditLogAction.member_move
+                 
+                 found_entry = None
+                 async for entry in member.guild.audit_logs(limit=5, action=action_type):
+                     if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 20:
+                         found_entry = entry
+                         break
+                 
+                 prv_channel = discord.utils.get(member.guild.text_channels, name="prv")
+                 
+                 if found_entry and prv_channel:
+                     culprit = found_entry.user
+                     await prv_channel.send(f"⚠️ **تنبيه:** تم طرد البوت من الروم المحبوس بواسطة: {culprit.mention}")
+                     
+                     # Rejoin if possible
+                     if is_disconnect:
+                         try:
+                            await member.guild.get_channel(LOCKED_CHANNEL_ID).connect(self_deaf=True)
+                         except:
+                            pass
+
+             except Exception as e:
+                 print(f"Error in lock monitoring: {e}")
+
     # Check if user joined a channel
     if after.channel is not None and before.channel != after.channel:
         
