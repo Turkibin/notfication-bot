@@ -441,18 +441,29 @@ async def ajrr_command(interaction: discord.Interaction):
             
             # Play
             executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
-            vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
+            # Add reconnect option to prevent stalling
+            ffmpeg_opts = {
+                'options': '-vn -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+            }
+            vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable, **ffmpeg_opts))
             
-            # Wait until done
+            # Wait until done with safety timeout
+            start_time = datetime.datetime.now()
             while vc.is_playing():
                 await asyncio.sleep(1)
+                # Max 5 mins for AJRR
+                if (datetime.datetime.now() - start_time).total_seconds() > 300:
+                    break
             
             await asyncio.sleep(0.5) # Quick pause
-            await vc.disconnect()
+            if not LOCKED_CHANNEL_ID: # Only disconnect if not locked (though ajrr logic might vary)
+                 # Actually for AJRR command, we usually disconnect after playing unless locked?
+                 # If locked, we stay. If not locked, we leave.
+                 await vc.disconnect()
             
         except Exception as e:
             print(f"Error in ajrr command for {v_channel.name}: {e}")
-            if guild.voice_client:
+            if guild.voice_client and not LOCKED_CHANNEL_ID:
                 await guild.voice_client.disconnect()
     
     await interaction.followup.send("✅ تم الانتهاء من نشر الأجر في جميع الرومات.", ephemeral=True)
@@ -518,9 +529,12 @@ async def on_voice_state_update(member, before, after):
                 except Exception as e:
                     print(f"❌ Error playing audio: {e}")
                 
-                # Wait while playing
+                # Wait while playing (Timeout 15s for welcome)
+                start_time = datetime.datetime.now()
                 while vc.is_playing():
                     await asyncio.sleep(1)
+                    if (datetime.datetime.now() - start_time).total_seconds() > 15:
+                        break
                 
                 await asyncio.sleep(1)
             else:
@@ -635,13 +649,23 @@ async def play_prayer_audio(guild, prayer_name_en):
             
             try:
                 executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
-                vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
+                ffmpeg_opts = {
+                    'options': '-vn -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+                }
+                vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable, **ffmpeg_opts))
                 print(f"Playback started for {audio_file}")
             except Exception as e:
                  print(f"❌ FFmpeg Playback Error: {e}")
 
+            # Safety timeout for prayer audio (e.g., 5 minutes max)
+            start_time = datetime.datetime.now()
             while vc.is_playing():
                 await asyncio.sleep(1)
+                if (datetime.datetime.now() - start_time).total_seconds() > 300:
+                    print("⚠️ Prayer audio timeout, forcing stop.")
+                    vc.stop()
+                    break
+            
             await asyncio.sleep(1)
             
             await vc.disconnect()
