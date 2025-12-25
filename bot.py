@@ -468,6 +468,49 @@ async def ajrr_command(interaction: discord.Interaction):
     
     await interaction.followup.send("✅ تم الانتهاء من نشر الأجر في جميع الرومات.", ephemeral=True)
 
+@bot.tree.command(name="log", description="كشف من قام بطرد أو نقل البوت مؤخراً (للمشرفين فقط)")
+@app_commands.describe(code="كود الأمان")
+async def log_command(interaction: discord.Interaction, code: str):
+    """Checks audit logs for recent disconnects/moves targeting the bot."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    
+    report_lines = []
+    
+    try:
+        # Check Disconnects
+        async for entry in interaction.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_disconnect):
+            if entry.target.id == bot.user.id:
+                time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
+                # Show events from last 24 hours
+                if time_diff.total_seconds() < 86400:
+                    ago = f"{int(time_diff.total_seconds() // 60)} دقيقة"
+                    report_lines.append(f"🔴 **طرد** بواسطة {entry.user.mention} (قبل {ago})")
+
+        # Check Moves
+        async for entry in interaction.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_move):
+            if entry.target.id == bot.user.id:
+                time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
+                if time_diff.total_seconds() < 86400:
+                    ago = f"{int(time_diff.total_seconds() // 60)} دقيقة"
+                    report_lines.append(f"↔️ **نقل** بواسطة {entry.user.mention} (قبل {ago})")
+        
+        if report_lines:
+            # Sort likely not needed as audit logs are ordered, but good to just join
+            await interaction.followup.send("📝 **سجل التعدي على البوت (آخر 24 ساعة):**\n\n" + "\n".join(report_lines), ephemeral=True)
+        else:
+            await interaction.followup.send("✅ لم يتم العثور على أي سجل طرد أو نقل للبوت في السجلات الأخيرة.", ephemeral=True)
+            
+    except Exception as e:
+        await interaction.followup.send(f"❌ حدث خطأ أثناء فحص السجلات: {e}", ephemeral=True)
+
 @bot.event
 async def on_message(message):
     # Don't reply to self
@@ -486,70 +529,6 @@ async def on_voice_state_update(member, before, after):
     # Ignore bots
     if member.bot:
         return
-
-    # Check if BOT ITSELF was disconnected/moved while locked
-    if member.id == bot.user.id and before.channel is not None and after.channel != before.channel:
-        # If locked and moved/disconnected
-        if LOCKED_CHANNEL_ID and before.channel.id == LOCKED_CHANNEL_ID:
-             print("⚠️ Bot was disconnected/moved while LOCKED!")
-             
-             # 1. Find 'prv' channel immediately to report status
-             prv_channel = discord.utils.get(member.guild.text_channels, name="prv")
-             if not prv_channel:
-                 for c in member.guild.text_channels:
-                     if "prv" in c.name.lower():
-                         prv_channel = c
-                         break
-             
-             if prv_channel:
-                 await prv_channel.send(f"⚠️ **تم اكتشاف خروج من الروم المحبوس!**\nجاري فحص السجلات لكشف الفاعل... 🕵️‍♂️")
-
-             # Determine if it was a disconnect or move
-             is_disconnect = after.channel is None
-             
-             try:
-                 # Wait for audit log to populate
-                 await asyncio.sleep(3)
-                 
-                 found_entry = None
-                 
-                 # Strategy: Check BOTH Disconnect and Move logs regardless, just to be safe
-                 # Check Disconnect first
-                 async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_disconnect):
-                     if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
-                         found_entry = entry
-                         break
-                 
-                 # If not found, check Move
-                 if not found_entry:
-                     async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_move):
-                         if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
-                             found_entry = entry
-                             break
-
-                 if found_entry:
-                     culprit = found_entry.user
-                     print(f"🕵️ Culprit found: {culprit.name}")
-                     if prv_channel:
-                         action_name = "طرد البوت" if found_entry.action == discord.AuditLogAction.member_disconnect else "نقل البوت"
-                         await prv_channel.send(f"🚨 **تم كشف الفاعل!**\n👤 الاسم: {culprit.mention}\n📝 الفعل: {action_name}")
-                 else:
-                     print("❌ No audit log entry found.")
-                     if prv_channel:
-                         await prv_channel.send("❌ لم يتم العثور على اسم الفاعل في السجلات (قد يكون هناك تأخير من ديسكورد أو السجل مفقود).")
-
-                 # Rejoin if possible (Persistence)
-                 if is_disconnect:
-                     try:
-                        await member.guild.get_channel(LOCKED_CHANNEL_ID).connect(self_deaf=True)
-                        print("✅ Rejoined locked channel.")
-                     except Exception as re:
-                        print(f"Failed to rejoin: {re}")
-
-             except Exception as e:
-                 print(f"Error in lock monitoring: {e}")
-                 if prv_channel:
-                     await prv_channel.send(f"❌ حدث خطأ برمجي: {e}")
 
     # Check if user joined a channel
     if after.channel is not None and before.channel != after.channel:
