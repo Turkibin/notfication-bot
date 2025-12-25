@@ -468,10 +468,13 @@ async def ajrr_command(interaction: discord.Interaction):
     
     await interaction.followup.send("✅ تم الانتهاء من نشر الأجر في جميع الرومات.", ephemeral=True)
 
+# Variable to store recent disconnect logs locally
+recent_disconnects = []
+
 @bot.tree.command(name="log", description="كشف من قام بطرد أو نقل البوت مؤخراً (للمشرفين فقط)")
 @app_commands.describe(code="كود الأمان")
 async def log_command(interaction: discord.Interaction, code: str):
-    """Checks audit logs for recent disconnects/moves targeting the bot."""
+    """Shows the locally captured logs of who disconnected the bot."""
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
@@ -480,63 +483,23 @@ async def log_command(interaction: discord.Interaction, code: str):
         await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
-    
-    report_lines = []
-    
-    try:
-        # 1. Check Disconnects (Limit increased to 20 for better range)
-        async for entry in interaction.guild.audit_logs(limit=20, action=discord.AuditLogAction.member_disconnect):
-            try:
-                # Safety check: Ensure target exists
-                if entry.target is None:
-                    continue
-                    
-                if entry.target.id == bot.user.id:
-                    time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
-                    # Show events from last 24 hours
-                    if time_diff.total_seconds() < 86400:
-                        ago_minutes = int(time_diff.total_seconds() // 60)
-                        ago_str = f"{ago_minutes} دقيقة" if ago_minutes > 0 else "ثواني"
-                        
-                        user_mention = entry.user.mention if entry.user else "غير معروف"
-                        report_lines.append(f"🔴 **طرد** بواسطة {user_mention} (قبل {ago_str})")
-            except Exception as inner_e:
-                print(f"Skipping bad log entry: {inner_e}")
-                continue
+    # Clean up old logs (older than 24 hours)
+    global recent_disconnects
+    now = datetime.datetime.now()
+    recent_disconnects = [entry for entry in recent_disconnects if (now - entry['time']).total_seconds() < 86400]
 
-        # 2. Check Moves
-        async for entry in interaction.guild.audit_logs(limit=20, action=discord.AuditLogAction.member_move):
-            try:
-                if entry.target is None:
-                    continue
-                    
-                if entry.target.id == bot.user.id:
-                    time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
-                    if time_diff.total_seconds() < 86400:
-                        ago_minutes = int(time_diff.total_seconds() // 60)
-                        ago_str = f"{ago_minutes} دقيقة" if ago_minutes > 0 else "ثواني"
-                        
-                        user_mention = entry.user.mention if entry.user else "غير معروف"
-                        report_lines.append(f"↔️ **نقل** بواسطة {user_mention} (قبل {ago_str})")
-            except Exception as inner_e:
-                continue
+    if not recent_disconnects:
+        await interaction.response.send_message("✅ السجل نظيف! لم يتم رصد أي عمليات طرد مؤخراً.", ephemeral=True)
+        return
+
+    report = "📝 **سجل الطرد المرصود (آخر 24 ساعة):**\n\n"
+    for entry in reversed(recent_disconnects):
+        time_ago = int((now - entry['time']).total_seconds() // 60)
+        time_str = f"{time_ago} دقيقة" if time_ago > 0 else "ثواني"
         
-        # Sort lines by time (approximated by order of appearance, usually logs are new to old)
-        # But since we appended disconnects then moves, we might want to just show them.
-        
-        if report_lines:
-            # Combine and send
-            final_report = "📝 **سجل التعدي على البوت (آخر 24 ساعة):**\n\n" + "\n".join(report_lines)
-            if len(final_report) > 2000:
-                final_report = final_report[:1990] + "..." # Truncate if too long
-                
-            await interaction.followup.send(final_report, ephemeral=True)
-        else:
-            await interaction.followup.send("✅ لم يتم العثور على أي سجل طرد أو نقل للبوت في السجلات الأخيرة (20 سجل).", ephemeral=True)
-            
-    except Exception as e:
-        await interaction.followup.send(f"❌ حدث خطأ غير متوقع: {e}", ephemeral=True)
+        report += f"🔴 **{entry['action']}** بواسطة {entry['user']} في روم **{entry['channel']}** (قبل {time_str})\n"
+
+    await interaction.response.send_message(report, ephemeral=True)
 
 @bot.event
 async def on_message(message):
@@ -552,6 +515,67 @@ async def on_voice_state_update(member, before, after):
     # Check if bot is active (and not paused for prayer)
     if not bot_active or prayer_pause:
         return
+
+    # Check if BOT ITSELF was disconnected/moved while locked
+    if member.id == bot.user.id and before.channel is not None and after.channel != before.channel:
+        # If locked and moved/disconnected
+        if LOCKED_CHANNEL_ID and before.channel.id == LOCKED_CHANNEL_ID:
+             print("⚠️ Bot was disconnected/moved while LOCKED!")
+             
+             # Capture the event LOCALLY immediately
+             is_disconnect = after.channel is None
+             
+             async def capture_culprit():
+                 try:
+                     # Wait a bit for audit log
+                     await asyncio.sleep(2)
+                     
+                     found_entry = None
+                     
+                     # Check Disconnects
+                     async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_disconnect):
+                         if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
+                             found_entry = entry
+                             break
+                     
+                     # Check Moves if not found
+                     if not found_entry:
+                         async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_move):
+                             if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
+                                 found_entry = entry
+                                 break
+                     
+                     global recent_disconnects
+                     action_name = "طرد" if is_disconnect else "نقل"
+                     
+                     if found_entry:
+                         user_name = found_entry.user.mention
+                         print(f"🕵️ Culprit captured: {found_entry.user.name}")
+                     else:
+                         user_name = "غير معروف (لم يظهر في السجل)"
+                         print("❌ Culprit NOT found in audit log.")
+                     
+                     # Add to local log
+                     recent_disconnects.append({
+                         "user": user_name,
+                         "action": action_name,
+                         "channel": before.channel.name,
+                         "time": datetime.datetime.now()
+                     })
+                     
+                 except Exception as e:
+                     print(f"Error capturing culprit: {e}")
+
+             # Run capture task in background
+             bot.loop.create_task(capture_culprit())
+
+             # Rejoin if possible (Persistence)
+             if is_disconnect:
+                 try:
+                    await member.guild.get_channel(LOCKED_CHANNEL_ID).connect(self_deaf=True)
+                    print("✅ Rejoined locked channel.")
+                 except Exception as re:
+                    print(f"Failed to rejoin: {re}")
 
     # Ignore bots
     if member.bot:
