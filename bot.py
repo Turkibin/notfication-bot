@@ -491,33 +491,60 @@ async def on_voice_state_update(member, before, after):
     if member.id == bot.user.id and before.channel is not None and after.channel != before.channel:
         # If locked and moved/disconnected
         if LOCKED_CHANNEL_ID and before.channel.id == LOCKED_CHANNEL_ID:
+             print("⚠️ Bot was disconnected/moved while LOCKED! Checking Audit Logs...")
+             
              # Determine if it was a disconnect or move
              is_disconnect = after.channel is None
              
              try:
-                 # Wait a bit for audit log
-                 await asyncio.sleep(2)
+                 # Wait for audit log (Increased to 4s for safety)
+                 await asyncio.sleep(4)
                  
                  action_type = discord.AuditLogAction.member_disconnect if is_disconnect else discord.AuditLogAction.member_move
                  
                  found_entry = None
                  async for entry in member.guild.audit_logs(limit=5, action=action_type):
-                     if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 20:
+                     # Debug print
+                     # print(f"Checking log: {entry.user} did {entry.action} to {entry.target}")
+                     if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
                          found_entry = entry
                          break
                  
+                 # Find channel 'prv' (case insensitive)
                  prv_channel = discord.utils.get(member.guild.text_channels, name="prv")
+                 if not prv_channel:
+                     # Try finding any channel containing "prv"
+                     for c in member.guild.text_channels:
+                         if "prv" in c.name.lower():
+                             prv_channel = c
+                             break
                  
-                 if found_entry and prv_channel:
+                 # Fallback to 'chat' if prv not found, just to notify admin
+                 if not prv_channel:
+                     print("❌ Could not find channel 'prv'!")
+                     # Optional: notify in general chat if urgent?
+                     # prv_channel = discord.utils.get(member.guild.text_channels, name="chat")
+
+                 if found_entry:
                      culprit = found_entry.user
-                     await prv_channel.send(f"⚠️ **تنبيه:** تم طرد البوت من الروم المحبوس بواسطة: {culprit.mention}")
+                     print(f"🕵️ Culprit found: {culprit.name}")
                      
-                     # Rejoin if possible
-                     if is_disconnect:
-                         try:
-                            await member.guild.get_channel(LOCKED_CHANNEL_ID).connect(self_deaf=True)
-                         except:
-                            pass
+                     if prv_channel:
+                         await prv_channel.send(f"⚠️ **تنبيه أمني:**\nتم طرد البوت من الروم المحبوس **{before.channel.name}**\n👤 الفاعل: {culprit.mention}")
+                     else:
+                         print("⚠️ Found culprit but NO channel to send to.")
+                 else:
+                     print("❌ Could not find audit log entry for the disconnect.")
+                     if prv_channel:
+                         await prv_channel.send("⚠️ تم طرد البوت من الروم المحبوس، ولكن لم يظهر الفاعل في السجلات (تأكد من صلاحيات البوت View Audit Log).")
+
+                 # Rejoin if possible (Persistence)
+                 if is_disconnect:
+                     try:
+                        await member.guild.get_channel(LOCKED_CHANNEL_ID).connect(self_deaf=True)
+                        print("✅ Rejoined locked channel.")
+                     except Exception as re:
+                        print(f"Failed to rejoin: {re}")
 
              except Exception as e:
                  print(f"Error in lock monitoring: {e}")
