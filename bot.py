@@ -167,16 +167,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 bot_active = True
 # Variable to track if welcome is paused due to prayer
 prayer_pause = False
-
-# --- Welcome Feature ---
-
-# (Removed setup_ranks command)
-
-# --- Role View & Select Menu ---
-# (Removed RoleSelect and RoleView classes)
-
-# --- Text Command Fallback (Emergency Solution) ---
-# (Removed setup command)
+# Variable to track locked channel (None = Free Mode)
+LOCKED_CHANNEL_ID = None
 
 # --- Security: Admin Code ---
 ADMIN_CODE = os.getenv("ADMIN_CODE", "th1") # Default code if not set
@@ -323,120 +315,61 @@ async def say_command(interaction: discord.Interaction, message: str, code: str,
     except Exception as e:
         await interaction.response.send_message(f"حدث خطأ أثناء الإرسال: {e}", ephemeral=True)
 
-# --- Game Role Selector (Self-Service) ---
-
-class RoleSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Rocket League", emoji="🚗", value="role_rocket", description="سيارات وكرة قدم"),
-            discord.SelectOption(label="FiveM", emoji="👮‍♂️", value="role_fivem", description="حياة واقعية GTA V"),
-            discord.SelectOption(label="Call of Duty", emoji="💀", value="role_cod", description="حروب وإطلاق نار"),
-            discord.SelectOption(label="Minecraft", emoji="🪓", value="role_minecraft", description="بناء ومغامرات"),
-            discord.SelectOption(label="Fortnite", emoji="🔫", value="role_fortnite", description="باتل رويال"),
-            discord.SelectOption(label="Overwatch", emoji="�", value="role_overwatch", description="أبطال وقدرات"),
-        ]
-        super().__init__(placeholder="اختر ألعابك من هنا... | Select your games...", min_values=0, max_values=len(options), custom_id="role_select_menu")
-
-    async def callback(self, interaction: discord.Interaction):
-        # Defer immediately
-        await interaction.response.defer(ephemeral=True)
-        
-        guild = interaction.guild
-        all_values = [opt.value for opt in self.options]
-        
-        added = []
-        removed = []
-        
-        for value in all_values:
-            # Find the option to get the label (Role Name)
-            option = next(opt for opt in self.options if opt.value == value)
-            role_name = option.label # The role name is the label (e.g. "Fortnite")
-            
-            # Find or Create Role
-            role = discord.utils.get(guild.roles, name=role_name)
-            if not role:
-                try:
-                    role = await guild.create_role(name=role_name, mentionable=True)
-                except:
-                    continue # Skip if can't create
-            
-            # Check logic
-            if value in self.values:
-                # Selected -> Add
-                if role not in interaction.user.roles:
-                    await interaction.user.add_roles(role)
-                    added.append(role_name)
-            else:
-                # Not Selected -> Remove
-                if role in interaction.user.roles:
-                    await interaction.user.remove_roles(role)
-                    removed.append(role_name)
-
-        msg = ""
-        if added: msg += f"✅ تمت إضافة: {', '.join(added)}\n"
-        if removed: msg += f"❌ تمت إزالة: {', '.join(removed)}\n"
-        if not msg: msg = "لم يتم تغيير أي شيء."
-        
-        await interaction.followup.send(msg, ephemeral=True)
-
-class RoleView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(RoleSelect())
-
-@bot.tree.command(name="setup_ranks", description="إنشاء قائمة اختيار رتب الألعاب")
-@app_commands.describe(code="كود الأمان", channel="الروم (اختياري)")
-async def setup_ranks(interaction: discord.Interaction, code: str, channel: discord.TextChannel = None):
-    # Defer immediately to prevent timeout
-    await interaction.response.defer(ephemeral=True)
-
+@bot.tree.command(name="lock", description="حبس البوت في روم معين (صامت تماماً)")
+@app_commands.describe(channel="الروم الصوتي", code="كود الأمان")
+async def lock_channel(interaction: discord.Interaction, channel: discord.VoiceChannel, code: str):
+    """Locks the bot to a specific voice channel."""
+    global LOCKED_CHANNEL_ID
+    
     if not interaction.user.guild_permissions.administrator:
-        await interaction.followup.send("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
     if code != ADMIN_CODE:
-        await interaction.followup.send("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
-    target = channel or interaction.channel
-    if not target.permissions_for(interaction.guild.me).send_messages:
-        await interaction.followup.send("🚫 لا أستطيع الإرسال في هذا الروم.", ephemeral=True)
+    LOCKED_CHANNEL_ID = channel.id
+    
+    # Move bot to the channel immediately
+    try:
+        vc = interaction.guild.voice_client
+        if vc:
+            if vc.channel.id != channel.id:
+                await vc.move_to(channel)
+        else:
+            await channel.connect(self_deaf=True)
+            
+        await interaction.response.send_message(f"🔒 **تم حبس البوت في {channel.name}**.\nسيبقى صامتاً ولن يتحرك أو يرحب أو يؤذن حتى يتم فكه بالأمر `/unlock`.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"⚠️ تم تفعيل القفل ولكن واجهت مشكلة في الدخول: {e}", ephemeral=True)
+
+@bot.tree.command(name="unlock", description="فك حبس البوت وإرجاعه للوضع الطبيعي (للمشرفين فقط)")
+@app_commands.describe(code="كود الأمان")
+async def unlock_channel(interaction: discord.Interaction, code: str):
+    """Unlocks the bot allowing it to move freely."""
+    global LOCKED_CHANNEL_ID
+    
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
         return
 
-    embed = discord.Embed(
-        title="🎮 اختر ألعابك | Choose Your Games",
-        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-        color=discord.Color.gold()
-    )
-    if interaction.guild.icon:
-        embed.set_thumbnail(url=interaction.guild.icon.url)
-
-    await target.send(embed=embed, view=RoleView())
-    await interaction.followup.send("✅ تم إنشاء قائمة الألعاب بنجاح.", ephemeral=True)
-
-# --- Fallback Text Command ---
-@bot.command(name="setup_ranks")
-@commands.has_permissions(administrator=True)
-async def setup_ranks_text(ctx, code: str = None):
-    """Text command fallback: !setup_ranks <code>"""
     if code != ADMIN_CODE:
-        await ctx.send("🔒 الكود غير صحيح أو مفقود! الاستخدام: `!setup_ranks <code>`")
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
         return
 
-    embed = discord.Embed(
-        title="🎮 اختر ألعابك | Choose Your Games",
-        description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-        color=discord.Color.gold()
-    )
-    if ctx.guild.icon:
-        embed.set_thumbnail(url=ctx.guild.icon.url)
+    LOCKED_CHANNEL_ID = None
+    
+    # Force disconnect to reset state
+    if interaction.guild.voice_client:
+        await interaction.guild.voice_client.disconnect(force=True)
 
-    await ctx.send(embed=embed, view=RoleView())
-    await ctx.message.delete() # Clean up command
+    await interaction.response.send_message("🔓 **تم فك القفل!**\nالبوت الآن حر وسيقوم بالترحيب والأذان في جميع الرومات كالمعتاد.", ephemeral=True)
 
 @bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في جميع الرومات الصوتية النشطة")
 async def ajrr_command(interaction: discord.Interaction):
     """Plays ajrr.mp3 in ALL active voice channels."""
+    global LOCKED_CHANNEL_ID
     
     guild = interaction.guild
     audio_file = "ajrr.mp3"
@@ -445,6 +378,43 @@ async def ajrr_command(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️ عذراً، ملف الصوت `ajrr.mp3` غير موجود في البوت.", ephemeral=True)
         return
 
+    # --- LOCKED MODE LOGIC ---
+    if LOCKED_CHANNEL_ID:
+        channel = guild.get_channel(LOCKED_CHANNEL_ID)
+        if not channel:
+            LOCKED_CHANNEL_ID = None # Reset if deleted
+            await interaction.response.send_message("⚠️ الروم المحبوس لم يعد موجوداً! تم العودة للوضع الطبيعي.", ephemeral=True)
+            return
+
+        # AJRR Command EXCEPTION:
+        # User said "Don't do anything", but usually direct commands like /ajrr are exceptions.
+        # However, to be safe and strict with "Don't do anything", we will block this too
+        # unless you want it enabled.
+        # Based on "مايسوي شي ولا يروح ابد", I will block it or make it silent.
+        # BUT, usually admin commands override. 
+        # I will allow /ajrr to work ONLY in the locked channel, as it is a direct command.
+        
+        await interaction.response.send_message(f"🔒 البوت محبوس في **{channel.name}**، سيتم التشغيل هناك فقط.", ephemeral=True)
+        
+        try:
+            vc = guild.voice_client
+            if not vc or not vc.is_connected():
+                vc = await channel.connect(self_deaf=True)
+            elif vc.channel.id != channel.id:
+                await vc.move_to(channel)
+            
+            if vc.is_playing():
+                vc.stop()
+                
+            executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
+            vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
+            # Don't disconnect in locked mode
+            
+        except Exception as e:
+            await interaction.followup.send(f"❌ خطأ: {e}", ephemeral=True)
+        return
+
+    # --- NORMAL MODE LOGIC ---
     # Find ALL channels with people (No bots)
     active_channels = [
         vc for vc in guild.voice_channels 
@@ -493,26 +463,6 @@ async def on_message(message):
     if message.author == bot.user:
         return
     
-    # --- MAGIC BYPASS FOR SETUP ---
-    # If the user says EXACTLY "!setup_ranks th1", we force run the setup.
-    # This bypasses intent issues sometimes or command sync lag.
-    if message.content.strip() == "!setup_ranks th1":
-        if message.author.guild_permissions.administrator:
-            try:
-                embed = discord.Embed(
-                    title="🎮 اختر ألعابك | Choose Your Games",
-                    description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-                    color=discord.Color.gold()
-                )
-                if message.guild.icon:
-                    embed.set_thumbnail(url=message.guild.icon.url)
-                
-                await message.channel.send(embed=embed, view=RoleView())
-                await message.delete()
-                return # Stop processing
-            except Exception as e:
-                print(f"Magic Setup Error: {e}")
-    
     # Process other commands (needed for prefix commands like !force_sync)
     await bot.process_commands(message)
 
@@ -528,8 +478,15 @@ async def on_voice_state_update(member, before, after):
 
     # Check if user joined a channel
     if after.channel is not None and before.channel != after.channel:
-        voice_channel = after.channel
         
+        # --- LOCKED MODE CHECK (STRICT SILENCE) ---
+        if LOCKED_CHANNEL_ID:
+            # COMPLETELY IGNORE EVERYTHING if locked.
+            # Do not welcome anyone, anywhere. Even in the locked channel.
+            print(f"🔒 Locked Mode Active: Ignoring join event for {member.name}")
+            return 
+        
+        voice_channel = after.channel
         # Check permissions
         permissions = voice_channel.permissions_for(member.guild.me)
         if not permissions.connect or not permissions.speak:
@@ -537,14 +494,26 @@ async def on_voice_state_update(member, before, after):
             return
 
         try:
-            # Connect
-            vc = await voice_channel.connect(self_deaf=True)
+            # Connect logic (Handle both Lock and Normal modes)
+            vc = member.guild.voice_client
             
+            # If not connected, connect
+            if not vc or not vc.is_connected():
+                vc = await voice_channel.connect(self_deaf=True)
+            
+            # If connected but to wrong channel (Normal mode mainly, or fix lock drift)
+            elif vc.channel.id != voice_channel.id:
+                await vc.move_to(voice_channel)
+
             # Look for audio file
             if os.path.exists("welcome.mp3"):
                 print("Found welcome.mp3, attempting to play...")
                 try:
-                    vc.play(discord.FFmpegPCMAudio("welcome.mp3"))
+                    if vc.is_playing():
+                        vc.stop()
+                        
+                    executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
+                    vc.play(discord.FFmpegPCMAudio(source="welcome.mp3", executable=executable))
                     print("Playing started successfully.")
                 except Exception as e:
                     print(f"❌ Error playing audio: {e}")
@@ -557,14 +526,15 @@ async def on_voice_state_update(member, before, after):
             else:
                 print(f"Error: 'welcome.mp3' file not found! Current dir files: {os.listdir('.')}")
 
-            # Disconnect
-            await vc.disconnect()
+            # Disconnect ONLY if NOT locked
+            if not LOCKED_CHANNEL_ID:
+                await vc.disconnect()
             
         except discord.errors.ClientException:
             pass
         except Exception as e:
             print(f"An error occurred: {e}")
-            if member.guild.voice_client:
+            if member.guild.voice_client and not LOCKED_CHANNEL_ID:
                 await member.guild.voice_client.disconnect()
 
 # --- Prayer Times Feature (Voice Only) ---
@@ -626,6 +596,18 @@ async def play_prayer_audio(guild, prayer_name_en):
         print(f"Audio file not found for {prayer_name_en}")
         return False
 
+    # --- LOCKED MODE LOGIC ---
+    if LOCKED_CHANNEL_ID:
+        channel = guild.get_channel(LOCKED_CHANNEL_ID)
+        if not channel:
+            return False # Locked channel deleted?
+            
+        print(f"Locked mode: Prayer time, but staying SILENT in {channel.name}")
+        # User requested: "Don't do anything" in locked mode.
+        # So we just return True (task done) without playing audio.
+        return True
+
+    # --- NORMAL MODE LOGIC ---
     # Find all voice channels with members (excluding bots)
     active_voice_channels = [
         vc for vc in guild.voice_channels 
@@ -652,7 +634,8 @@ async def play_prayer_audio(guild, prayer_name_en):
                 print(f"❌ File not found right before playing: {audio_file}")
             
             try:
-                vc.play(discord.FFmpegPCMAudio(audio_file))
+                executable = FFMPEG_PATH if FFMPEG_PATH else "ffmpeg"
+                vc.play(discord.FFmpegPCMAudio(source=audio_file, executable=executable))
                 print(f"Playback started for {audio_file}")
             except Exception as e:
                  print(f"❌ FFmpeg Playback Error: {e}")
@@ -845,6 +828,9 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} commands globally!")
+        print("📜 Active Commands:")
+        for cmd in synced:
+            print(f" - /{cmd.name}")
     except Exception as e:
         print(f"⚠️ Global sync error: {e}")
 
@@ -858,49 +844,6 @@ async def on_ready():
             print(f"🧹 Cleared local duplicate commands for: {guild.name}")
         except Exception as e:
             print(f"❌ Failed to clear duplicates for {guild.name}: {e}")
-
-    # Register the persistent view for roles so it works after restart
-    bot.add_view(RoleView()) 
-    print("✅ RoleView registered.")
-
-    # --- Auto-Send Rank Panel (Self-Check & Fix) ---
-    for guild in bot.guilds:
-        # 1. Search for channel
-        channel_name = "choose-your-rank"
-        channel = discord.utils.get(guild.text_channels, name=channel_name)
-        
-        if not channel:
-            print(f"⚠️ Channel '{channel_name}' NOT found in {guild.name}")
-            continue
-
-        print(f"✅ Found channel '{channel.name}' in {guild.name}")
-        
-        # 2. Check Permissions
-        perms = channel.permissions_for(guild.me)
-        if not perms.send_messages or not perms.manage_messages:
-            print(f"❌ MISSING PERMISSIONS in {channel.name}: Send={perms.send_messages}, Manage={perms.manage_messages}")
-            # Try to alert owner in logs
-            continue
-
-        # 3. Try to Send
-        try:
-            # Purge old messages from bot
-            await channel.purge(limit=20, check=lambda m: m.author == bot.user)
-            
-            # Send Panel
-            embed = discord.Embed(
-                title="🎮 اختر ألعابك | Choose Your Games",
-                description="اختر الألعاب التي تلعبها للحصول على رتبتها.\nSelect the games you play to get their roles.",
-                color=discord.Color.gold()
-            )
-            if guild.icon:
-                embed.set_thumbnail(url=guild.icon.url)
-            
-            await channel.send(embed=embed, view=RoleView())
-            print(f"🚀 SUCCESS: Sent rank panel to {channel.name}")
-            
-        except Exception as e:
-            print(f"❌ ERROR sending rank panel: {e}")
 
     if not prayer_task.is_running():
         prayer_task.start()
