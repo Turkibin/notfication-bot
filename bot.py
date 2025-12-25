@@ -491,52 +491,52 @@ async def on_voice_state_update(member, before, after):
     if member.id == bot.user.id and before.channel is not None and after.channel != before.channel:
         # If locked and moved/disconnected
         if LOCKED_CHANNEL_ID and before.channel.id == LOCKED_CHANNEL_ID:
-             print("⚠️ Bot was disconnected/moved while LOCKED! Checking Audit Logs...")
+             print("⚠️ Bot was disconnected/moved while LOCKED!")
              
+             # 1. Find 'prv' channel immediately to report status
+             prv_channel = discord.utils.get(member.guild.text_channels, name="prv")
+             if not prv_channel:
+                 for c in member.guild.text_channels:
+                     if "prv" in c.name.lower():
+                         prv_channel = c
+                         break
+             
+             if prv_channel:
+                 await prv_channel.send(f"⚠️ **تم اكتشاف خروج من الروم المحبوس!**\nجاري فحص السجلات لكشف الفاعل... 🕵️‍♂️")
+
              # Determine if it was a disconnect or move
              is_disconnect = after.channel is None
              
              try:
-                 # Wait for audit log (Increased to 4s for safety)
-                 await asyncio.sleep(4)
-                 
-                 action_type = discord.AuditLogAction.member_disconnect if is_disconnect else discord.AuditLogAction.member_move
+                 # Wait for audit log to populate
+                 await asyncio.sleep(3)
                  
                  found_entry = None
-                 async for entry in member.guild.audit_logs(limit=5, action=action_type):
-                     # Debug print
-                     # print(f"Checking log: {entry.user} did {entry.action} to {entry.target}")
+                 
+                 # Strategy: Check BOTH Disconnect and Move logs regardless, just to be safe
+                 # Check Disconnect first
+                 async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_disconnect):
                      if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
                          found_entry = entry
                          break
                  
-                 # Find channel 'prv' (case insensitive)
-                 prv_channel = discord.utils.get(member.guild.text_channels, name="prv")
-                 if not prv_channel:
-                     # Try finding any channel containing "prv"
-                     for c in member.guild.text_channels:
-                         if "prv" in c.name.lower():
-                             prv_channel = c
+                 # If not found, check Move
+                 if not found_entry:
+                     async for entry in member.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_move):
+                         if entry.target.id == bot.user.id and (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 25:
+                             found_entry = entry
                              break
-                 
-                 # Fallback to 'chat' if prv not found, just to notify admin
-                 if not prv_channel:
-                     print("❌ Could not find channel 'prv'!")
-                     # Optional: notify in general chat if urgent?
-                     # prv_channel = discord.utils.get(member.guild.text_channels, name="chat")
 
                  if found_entry:
                      culprit = found_entry.user
                      print(f"🕵️ Culprit found: {culprit.name}")
-                     
                      if prv_channel:
-                         await prv_channel.send(f"⚠️ **تنبيه أمني:**\nتم طرد البوت من الروم المحبوس **{before.channel.name}**\n👤 الفاعل: {culprit.mention}")
-                     else:
-                         print("⚠️ Found culprit but NO channel to send to.")
+                         action_name = "طرد البوت" if found_entry.action == discord.AuditLogAction.member_disconnect else "نقل البوت"
+                         await prv_channel.send(f"🚨 **تم كشف الفاعل!**\n👤 الاسم: {culprit.mention}\n📝 الفعل: {action_name}")
                  else:
-                     print("❌ Could not find audit log entry for the disconnect.")
+                     print("❌ No audit log entry found.")
                      if prv_channel:
-                         await prv_channel.send("⚠️ تم طرد البوت من الروم المحبوس، ولكن لم يظهر الفاعل في السجلات (تأكد من صلاحيات البوت View Audit Log).")
+                         await prv_channel.send("❌ لم يتم العثور على اسم الفاعل في السجلات (قد يكون هناك تأخير من ديسكورد أو السجل مفقود).")
 
                  # Rejoin if possible (Persistence)
                  if is_disconnect:
@@ -548,6 +548,8 @@ async def on_voice_state_update(member, before, after):
 
              except Exception as e:
                  print(f"Error in lock monitoring: {e}")
+                 if prv_channel:
+                     await prv_channel.send(f"❌ حدث خطأ برمجي: {e}")
 
     # Check if user joined a channel
     if after.channel is not None and before.channel != after.channel:
