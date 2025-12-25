@@ -485,31 +485,58 @@ async def log_command(interaction: discord.Interaction, code: str):
     report_lines = []
     
     try:
-        # Check Disconnects
-        async for entry in interaction.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_disconnect):
-            if entry.target.id == bot.user.id:
-                time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
-                # Show events from last 24 hours
-                if time_diff.total_seconds() < 86400:
-                    ago = f"{int(time_diff.total_seconds() // 60)} دقيقة"
-                    report_lines.append(f"🔴 **طرد** بواسطة {entry.user.mention} (قبل {ago})")
+        # 1. Check Disconnects (Limit increased to 20 for better range)
+        async for entry in interaction.guild.audit_logs(limit=20, action=discord.AuditLogAction.member_disconnect):
+            try:
+                # Safety check: Ensure target exists
+                if entry.target is None:
+                    continue
+                    
+                if entry.target.id == bot.user.id:
+                    time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
+                    # Show events from last 24 hours
+                    if time_diff.total_seconds() < 86400:
+                        ago_minutes = int(time_diff.total_seconds() // 60)
+                        ago_str = f"{ago_minutes} دقيقة" if ago_minutes > 0 else "ثواني"
+                        
+                        user_mention = entry.user.mention if entry.user else "غير معروف"
+                        report_lines.append(f"🔴 **طرد** بواسطة {user_mention} (قبل {ago_str})")
+            except Exception as inner_e:
+                print(f"Skipping bad log entry: {inner_e}")
+                continue
 
-        # Check Moves
-        async for entry in interaction.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_move):
-            if entry.target.id == bot.user.id:
-                time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
-                if time_diff.total_seconds() < 86400:
-                    ago = f"{int(time_diff.total_seconds() // 60)} دقيقة"
-                    report_lines.append(f"↔️ **نقل** بواسطة {entry.user.mention} (قبل {ago})")
+        # 2. Check Moves
+        async for entry in interaction.guild.audit_logs(limit=20, action=discord.AuditLogAction.member_move):
+            try:
+                if entry.target is None:
+                    continue
+                    
+                if entry.target.id == bot.user.id:
+                    time_diff = datetime.datetime.now(datetime.timezone.utc) - entry.created_at
+                    if time_diff.total_seconds() < 86400:
+                        ago_minutes = int(time_diff.total_seconds() // 60)
+                        ago_str = f"{ago_minutes} دقيقة" if ago_minutes > 0 else "ثواني"
+                        
+                        user_mention = entry.user.mention if entry.user else "غير معروف"
+                        report_lines.append(f"↔️ **نقل** بواسطة {user_mention} (قبل {ago_str})")
+            except Exception as inner_e:
+                continue
+        
+        # Sort lines by time (approximated by order of appearance, usually logs are new to old)
+        # But since we appended disconnects then moves, we might want to just show them.
         
         if report_lines:
-            # Sort likely not needed as audit logs are ordered, but good to just join
-            await interaction.followup.send("📝 **سجل التعدي على البوت (آخر 24 ساعة):**\n\n" + "\n".join(report_lines), ephemeral=True)
+            # Combine and send
+            final_report = "📝 **سجل التعدي على البوت (آخر 24 ساعة):**\n\n" + "\n".join(report_lines)
+            if len(final_report) > 2000:
+                final_report = final_report[:1990] + "..." # Truncate if too long
+                
+            await interaction.followup.send(final_report, ephemeral=True)
         else:
-            await interaction.followup.send("✅ لم يتم العثور على أي سجل طرد أو نقل للبوت في السجلات الأخيرة.", ephemeral=True)
+            await interaction.followup.send("✅ لم يتم العثور على أي سجل طرد أو نقل للبوت في السجلات الأخيرة (20 سجل).", ephemeral=True)
             
     except Exception as e:
-        await interaction.followup.send(f"❌ حدث خطأ أثناء فحص السجلات: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ حدث خطأ غير متوقع: {e}", ephemeral=True)
 
 @bot.event
 async def on_message(message):
