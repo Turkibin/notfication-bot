@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 import asyncio
 import os
+import sys
 import datetime
 import aiohttp
 from dotenv import load_dotenv
@@ -366,6 +367,49 @@ async def unlock_channel(interaction: discord.Interaction, code: str):
 
     await interaction.response.send_message("🔓 **تم فك القفل!**\nالبوت الآن حر وسيقوم بالترحيب والأذان في جميع الرومات كالمعتاد.", ephemeral=True)
 
+@bot.tree.command(name="deploy", description="نشر التعديلات تلقائياً إلى Railway (للمشرفين فقط)")
+@app_commands.describe(code="كود الأمان")
+async def deploy_command(interaction: discord.Interaction, code: str):
+    """Deploys changes to Railway automatically."""
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("عذراً، هذا الأمر للمشرفين فقط 🚫", ephemeral=True)
+        return
+
+    if code != ADMIN_CODE:
+        await interaction.response.send_message("🔒 عذراً، كود الأمان غير صحيح!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        import subprocess
+        import os
+        
+        # Check if we're in a git repo
+        if not os.path.exists('.git'):
+            await interaction.followup.send("❌ هذا المجلد ليس git repository!", ephemeral=True)
+            return
+        
+        # Run auto_deploy.py
+        result = subprocess.run(
+            [sys.executable, 'auto_deploy.py'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        output = result.stdout + result.stderr
+        
+        if result.returncode == 0:
+            await interaction.followup.send(f"✅ **تم النشر بنجاح!**\n```\n{output[-500:]}\n```\n🔄 Railway سيبدأ النشر التلقائي قريباً...", ephemeral=True)
+        else:
+            await interaction.followup.send(f"❌ **فشل النشر**\n```\n{output[-500:]}\n```\n💡 تحقق من إعدادات Git والاتصال.", ephemeral=True)
+            
+    except subprocess.TimeoutExpired:
+        await interaction.followup.send("⏱️ انتهت مهلة الانتظار. قد يكون النشر جارياً...", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ حدث خطأ: {e}", ephemeral=True)
+
 @bot.tree.command(name="ajrr", description="تشغيل مقطع الأجر (صلي على محمد) في جميع الرومات الصوتية النشطة")
 async def ajrr_command(interaction: discord.Interaction):
     """Plays ajrr.mp3 in ALL active voice channels."""
@@ -476,6 +520,13 @@ async def on_message(message):
     # Don't reply to self
     if message.author == bot.user:
         return
+    
+    # Check for greeting "السلام عليكم" or "سلام عليكم"
+    message_content = message.content.strip()
+    greetings = ["السلام عليكم", "سلام عليكم", "السلام عليكم ورحمة الله", "السلام عليكم ورحمة الله وبركاته"]
+    
+    if any(greeting in message_content for greeting in greetings):
+        await message.channel.send("وعليكم السلام ورحمة الله وبركاته 🌸")
     
     # Process other commands (needed for prefix commands like !force_sync)
     await bot.process_commands(message)
