@@ -932,4 +932,19 @@ if __name__ == "__main__":
     try:
         bot.run(TOKEN)
     except Exception as e:
-        print(f"Error starting bot: {e}")
+        print(f"Error starting bot: {e}")#   = = =   F8'E  '.*J'1  'D#/H'1  'D*A'9DJ  = = =  
+  
+ @ b o t . e v e n t  
+ a s y n c   d e f   o n _ r a w _ r e a c t i o n _ a d d ( p a y l o a d ) :  
+         i f   p a y l o a d . u s e r _ i d   = =   b o t . u s e r . i d :  
+                 r e t u r n  
+         g u i l d   =   b o t . g e t _ g u i l d ( p a y l o a d . g u i l d _ i d )  
+         i f   n o t   g u i l d :  
+                 r e t u r n  
+         m e m b e r   =   g u i l d . g e t _ m e m b e r ( p a y l o a d . u s e r _ i d )  
+         i f   n o t   m e m b e r :  
+                 r e t u r n  
+         #   '.*J'1  'DEF5'* 
+         i f   p a y l o a d . m e s s a g e _ i d   = =   1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 :   #   :J1  'D1BE  D13'D*C 
+                 r o l e s   =   {  
+ 
